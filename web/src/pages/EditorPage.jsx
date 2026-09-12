@@ -174,11 +174,13 @@ export default function EditorPage({ templateId, onBack }) {
     }));
   }
 
-  async function handleDeleteRegion() {
-    if (!selected) return;
-    await api.deleteRegion(templateId, selected.id);
-    setTemplate((t) => ({ ...t, template_regions: t.template_regions.filter((r) => r.id !== selected.id) }));
-    setSelectedId(null);
+  async function handleDeleteRegion(region) {
+    const target = region || selected;
+    if (!target) return;
+    if (!confirm(`Delete "${target.label}"?`)) return;
+    await api.deleteRegion(templateId, target.id);
+    setTemplate((t) => ({ ...t, template_regions: t.template_regions.filter((r) => r.id !== target.id) }));
+    if (selectedId === target.id) setSelectedId(null);
   }
 
   async function runPreview() {
@@ -238,6 +240,14 @@ export default function EditorPage({ templateId, onBack }) {
               onClick={(e) => { e.stopPropagation(); setSelectedId(r.id); }}
             >
               <span className="region-label">{r.label}</span>
+              <span
+                className="region-delete-icon"
+                title="Delete this region"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); handleDeleteRegion(r); }}
+              >
+                🗑
+              </span>
               {selectedId === r.id && (
                 <div className="resize-handle" onMouseDown={(e) => startResize(e, r)} />
               )}
@@ -275,7 +285,7 @@ export default function EditorPage({ templateId, onBack }) {
               region={selected}
               onChange={handleUpdateRegion}
               onReset={handleResetStyle}
-              onDelete={handleDeleteRegion}
+              onDelete={() => handleDeleteRegion()}
             />
           )}
         </div>

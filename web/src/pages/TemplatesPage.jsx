@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api.js';
+import { api, getStoredApiKey, setStoredApiKey } from '../api.js';
 import { colorForIndex, colorForCategoryId } from '../utils/palette.js';
 
 export default function TemplatesPage({ onOpenTemplate }) {
@@ -102,6 +102,9 @@ export default function TemplatesPage({ onOpenTemplate }) {
         ) : (
           <div className="hint-text">Add CANVA_CLIENT_ID/SECRET/REDIRECT_URI to enable.</div>
         )}
+
+        <div className="sidebar-title canva-title">Preview access</div>
+        <ApiKeySettings />
       </div>
 
       <div className="content">
@@ -242,6 +245,32 @@ function UploadModal({ categories, onClose, onCreated }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ApiKeySettings() {
+  const [key, setKey] = useState(getStoredApiKey());
+  const [saved, setSaved] = useState(false);
+
+  function handleSave() {
+    setStoredApiKey(key.trim());
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+
+  return (
+    <div className="api-key-settings">
+      <p className="hint-text">
+        Needed for the "Preview autofill" button in the editor (same key as <code>FILLCRAFT_API_KEY</code> in Dokploy). Stored only in this browser.
+      </p>
+      <input
+        type="password"
+        placeholder="Paste your API key…"
+        value={key}
+        onChange={(e) => setKey(e.target.value)}
+      />
+      <button className="ghost-btn full" onClick={handleSave}>{saved ? 'Saved ✓' : 'Save'}</button>
     </div>
   );
 }

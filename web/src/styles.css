@@ -88,6 +88,10 @@ body {
 .canva-status { font-size: 13px; margin-bottom: 8px; padding: 6px 10px; border-radius: 8px; }
 .canva-status.connected { color: var(--mint); background: rgba(6,214,160,.12); }
 .canva-connect-link { display: block; text-align: center; text-decoration: none; }
+.api-key-settings input[type=password] {
+  width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  padding: 8px 10px; border-radius: 8px; font-size: 12.5px; margin-bottom: 8px;
+}
 
 .content { flex: 1; padding: 22px 30px; overflow-y: auto; }
 .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
@@ -224,6 +228,12 @@ body {
   position: absolute; top: -20px; left: 0; font-size: 10.5px; background: var(--panel-2);
   padding: 2px 6px; border-radius: 5px; color: var(--muted); white-space: nowrap;
 }
+.region-delete-icon {
+  position: absolute; top: -22px; right: 0; font-size: 12px; cursor: pointer;
+  background: var(--panel-2); border-radius: 5px; padding: 2px 5px; opacity: .75;
+  transition: opacity .12s ease, background .12s ease;
+}
+.region-delete-icon:hover { opacity: 1; background: rgba(255,107,107,.25); }
 .resize-handle {
   position: absolute; right: -5px; bottom: -5px; width: 12px; height: 12px;
   background: var(--grad-primary); border-radius: 50%; cursor: nwse-resize;

@@ -1,4 +1,19 @@
 const BASE = '/api';
+const API_KEY_STORAGE = 'fillcraft_api_key';
+
+export function getStoredApiKey() {
+  try { return localStorage.getItem(API_KEY_STORAGE) || ''; } catch { return ''; }
+}
+export function setStoredApiKey(key) {
+  try {
+    if (key) localStorage.setItem(API_KEY_STORAGE, key);
+    else localStorage.removeItem(API_KEY_STORAGE);
+  } catch { /* localStorage unavailable, ignore */ }
+}
+function authHeaders() {
+  const key = getStoredApiKey();
+  return key ? { 'x-api-key': key } : {};
+}
 
 async function handle(res) {
   if (!res.ok) {
@@ -78,7 +93,7 @@ export const api = {
   autofillPreview: (templateId, values) =>
     fetch(`${BASE}/templates/${templateId}/autofill`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(values),
     }).then((res) => {
       if (!res.ok) return handle(res);
