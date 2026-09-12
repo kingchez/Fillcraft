@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { supabase, supabaseAvailable } from '../db/supabase.js';
 import { localDb } from '../db/sqlite.js';
+import { deleteAsset } from './storage.js';
 
 function nowIso() {
   return new Date().toISOString();
@@ -119,12 +120,23 @@ export async function updateTemplate(id, patch) {
 }
 
 export async function deleteTemplate(id) {
+  const existing = await getTemplate(id);
+
   if (supabaseAvailable()) {
     await supabase.from('template_regions').delete().eq('template_id', id);
     await supabase.from('templates').delete().eq('id', id);
   }
   localDb.prepare('DELETE FROM template_regions WHERE template_id = ?').run(id);
   localDb.prepare('DELETE FROM templates WHERE id = ?').run(id);
+
+  // Clean up the actual image file too, so deleting a template doesn't
+  // leave an orphaned asset behind in Storage / the local uploads mirror.
+  if (existing) {
+    await deleteAsset(existing.source_image_url);
+    if (existing.thumbnail_url && existing.thumbnail_url !== existing.source_image_url) {
+      await deleteAsset(existing.thumbnail_url);
+    }
+  }
 }
 
 // ---------------- Regions ----------------

@@ -38,6 +38,32 @@ export async function storeAsset(buffer, filename, contentType) {
   return { url: `/uploads/${key}`, local_path: key, local_url: `/uploads/${key}` };
 }
 
+// Deletes an asset by its stored URL — from Supabase Storage (if configured)
+// and from the local disk mirror. Used when a template (or anything
+// referencing a stored file) is deleted, so files don't accumulate as
+// orphans once their owning record is gone.
+export async function deleteAsset(url) {
+  if (!url || !url.includes('/')) return;
+  const key = url.split('/').pop().split('?')[0];
+  if (!key) return;
+
+  if (sbAvailable()) {
+    try {
+      const { error } = await sb.storage.from(BUCKET).remove([key]);
+      if (error) console.error('[storage] Supabase delete failed:', error.message);
+    } catch (err) {
+      console.error('[storage] Supabase delete threw:', err.message);
+    }
+  }
+
+  try {
+    const localPath = path.join(getLocalUploadsDir(), key);
+    if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+  } catch (err) {
+    console.error('[storage] local delete failed:', err.message);
+  }
+}
+
 // Converts a "/uploads/<key>" web path (our own local-mirror URL scheme)
 // back into a real filesystem path so the canvas renderer can load it
 // directly. Absolute http(s) URLs and data URIs pass through unchanged.
