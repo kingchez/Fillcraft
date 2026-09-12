@@ -29,6 +29,18 @@ export async function createCategory(name) {
   return { id, name, created_at };
 }
 
+// Deleting a category never deletes the templates in it — they just become
+// uncategorized (category_id -> null), same behavior as Supabase's
+// "on delete set null" foreign key.
+export async function deleteCategory(id) {
+  if (supabaseAvailable()) {
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) console.error('[templateStore] deleteCategory supabase error:', error.message);
+  }
+  localDb.prepare('UPDATE templates SET category_id = NULL WHERE category_id = ?').run(id);
+  localDb.prepare('DELETE FROM categories WHERE id = ?').run(id);
+}
+
 // ---------------- Templates ----------------
 
 function localTemplateWithRegions(id) {

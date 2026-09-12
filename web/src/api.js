@@ -20,6 +20,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     }).then(handle),
+  deleteCategory: (id) => fetch(`${BASE}/categories/${id}`, { method: 'DELETE' }).then(handle),
 
   // Templates
   listTemplates: () => fetch(`${BASE}/templates`).then(handle),

@@ -1,4 +1,4 @@
-import { listCategories, createCategory } from '../services/templateStore.js';
+import { listCategories, createCategory, deleteCategory } from '../services/templateStore.js';
 
 export default async function categoriesRoutes(app) {
   app.get('/', async () => listCategories());
@@ -10,5 +10,11 @@ export default async function categoriesRoutes(app) {
     }
     const category = await createCategory(name.trim());
     reply.code(201).send(category);
+  });
+
+  // Deleting a category leaves its templates in place, just uncategorized.
+  app.delete('/:id', async (req, reply) => {
+    await deleteCategory(req.params.id);
+    reply.code(204).send();
   });
 }

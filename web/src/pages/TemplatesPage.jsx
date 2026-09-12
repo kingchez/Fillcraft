@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { colorForIndex, colorForCategoryId } from '../utils/palette.js';
 
 export default function TemplatesPage({ onOpenTemplate }) {
   const [templates, setTemplates] = useState([]);
@@ -24,6 +25,19 @@ export default function TemplatesPage({ onOpenTemplate }) {
       ? templates
       : templates.filter((t) => t.category_id === activeCategory);
 
+  async function handleDeleteCategory(e, cat) {
+    e.stopPropagation();
+    const count = templates.filter((t) => t.category_id === cat.id).length;
+    const warning =
+      count > 0
+        ? `Delete "${cat.name}"? ${count} template${count === 1 ? '' : 's'} in it will become uncategorized (not deleted).`
+        : `Delete "${cat.name}"?`;
+    if (!confirm(warning)) return;
+    if (activeCategory === cat.id) setActiveCategory('all');
+    await api.deleteCategory(cat.id);
+    refresh();
+  }
+
   return (
     <div className="templates-page">
       <div className="sidebar">
@@ -32,18 +46,23 @@ export default function TemplatesPage({ onOpenTemplate }) {
           className={`category-item ${activeCategory === 'all' ? 'active' : ''}`}
           onClick={() => setActiveCategory('all')}
         >
+          <span className="cat-dot all-dot" />
           All templates
         </div>
-        {categories.map((c) => (
+        {categories.map((c, i) => (
           <div
             key={c.id}
             className={`category-item ${activeCategory === c.id ? 'active' : ''}`}
             onClick={() => setActiveCategory(c.id)}
           >
-            {c.name}
+            <span className="cat-dot" style={{ background: colorForIndex(i) }} />
+            <span className="category-name">{c.name}</span>
+            <span className="cat-delete" title="Delete category" onClick={(e) => handleDeleteCategory(e, c)}>
+              ✕
+            </span>
           </div>
         ))}
-        <button className="ghost-btn" onClick={() => setShowNewCategory(true)}>
+        <button className="ghost-btn full new-cat-btn" onClick={() => setShowNewCategory(true)}>
           + New category
         </button>
       </div>
@@ -63,7 +82,13 @@ export default function TemplatesPage({ onOpenTemplate }) {
         ) : (
           <div className="template-grid">
             {filtered.map((t) => (
-              <div key={t.id} className="template-card" onClick={() => onOpenTemplate(t.id)}>
+              <div
+                key={t.id}
+                className="template-card"
+                onClick={() => onOpenTemplate(t.id)}
+                style={{ '--card-accent': colorForCategoryId(categories, t.category_id) }}
+              >
+                <div className="template-card-accent" />
                 <div className="template-thumb">
                   <img src={t.thumbnail_url || t.source_image_url} alt={t.name} />
                 </div>
@@ -140,7 +165,7 @@ function UploadModal({ categories, onClose, onCreated }) {
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Instagram Quote Post" />
         </div>
         <div className="field">
-          <label>Category</label>
+          <label>Category (optional — leave blank if this template doesn't need one)</label>
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">No category</option>
             {categories.map((c) => (

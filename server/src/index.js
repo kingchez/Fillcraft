@@ -70,8 +70,19 @@ await app.register(imagesRoutes, { prefix: '/api/images' });
 await app.register(fontsRoutes, { prefix: '/api/fonts' });
 await app.register(canvaRoutes, { prefix: '/api/canva' });
 
+// Serve the built admin frontend (web/dist) for everything else. This one
+// registers first so it owns the `reply.sendFile` decorator (only one
+// registration is allowed to decorate it).
+const webDist = path.join(__dirname, '../../web/dist');
+await app.register(fastifyStatic, {
+  root: webDist,
+  prefix: '/',
+  wildcard: false,
+});
+
 // Serve locally-mirrored uploads (fallback asset URLs when Supabase Storage
-// isn't configured, or as a secondary source either way).
+// isn't configured, or as a secondary source either way). decorateReply must
+// be false here since the webDist registration above already added it.
 await app.register(fastifyStatic, {
   root: getLocalUploadsDir(),
   prefix: '/uploads/',
@@ -79,13 +90,6 @@ await app.register(fastifyStatic, {
 });
 
 // Serve the built admin frontend (web/dist) for everything else.
-const webDist = path.join(__dirname, '../../web/dist');
-await app.register(fastifyStatic, {
-  root: webDist,
-  prefix: '/',
-  decorateReply: false,
-  wildcard: false,
-});
 
 app.setNotFoundHandler((req, reply) => {
   if (req.raw.url?.startsWith('/api/') || req.raw.url?.startsWith('/uploads/')) {
