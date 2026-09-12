@@ -86,6 +86,20 @@ body {
 
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; }
+.field-label-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+.field-label-row label { margin-bottom: 0; }
+.field-hint { color: var(--muted); font-weight: 400; font-size: 11px; }
+.revert-icon {
+  background: none; border: none; color: var(--accent); font-size: 11px; cursor: pointer;
+  padding: 0; white-space: nowrap;
+}
+.revert-icon:hover { text-decoration: underline; }
+.icon-preview {
+  width: 56px; height: 56px; border-radius: 8px; background: var(--panel-2);
+  border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+  margin-bottom: 12px;
+}
+.icon-preview img { width: 32px; height: 32px; }
 .field input[type=text], .field input[type=number], .field textarea, .field select {
   width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
   padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: inherit;
@@ -125,6 +139,8 @@ body {
 }
 .region-box.text { border-color: rgba(90,160,220,.7); background: rgba(90,160,220,.08); }
 .region-box.image { border-color: rgba(217,164,65,.7); background: rgba(217,164,65,.08); }
+.region-box.shape { border-color: rgba(193,85,74,.7); background: rgba(193,85,74,.08); }
+.region-box.icon { border-color: rgba(150,110,220,.7); background: rgba(150,110,220,.08); }
 .region-box.selected { border-width: 2px; box-shadow: 0 0 0 2px var(--accent) inset; }
 .region-box.draft { border-style: dashed; pointer-events: none; }
 .region-label {
@@ -147,6 +163,8 @@ body {
 .type-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .type-dot.text { background: #5aa0dc; }
 .type-dot.image { background: var(--accent); }
+.type-dot.shape { background: #C1554A; }
+.type-dot.icon { background: #966EDC; }
 
 .inspector { border-top: 1px solid var(--border); padding-top: 14px; }
 .inspector .tag {

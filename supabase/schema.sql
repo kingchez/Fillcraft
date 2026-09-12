@@ -23,7 +23,7 @@ create table if not exists templates (
 create table if not exists template_regions (
   id uuid primary key default gen_random_uuid(),
   template_id uuid not null references templates(id) on delete cascade,
-  type text not null check (type in ('image','text')),
+  type text not null check (type in ('image','text','shape','icon')),
   label text not null,
   x numeric not null,
   y numeric not null,
@@ -45,6 +45,21 @@ create table if not exists template_regions (
   border_width numeric default 0,
   border_color text,
   filter text,
+
+  -- shape-only
+  shape_type text,        -- rectangle | circle | line | arrow | polygon
+  fill_color text,
+  stroke_color text,
+  stroke_width numeric default 0,
+  sides int,               -- for polygon
+
+  -- icon-only
+  icon_name text,           -- Iconify identifier, e.g. "mdi:heart"
+  icon_color text,
+
+  -- generic "original" snapshot for anything that isn't text (image/shape/icon
+  -- share this one JSON column for their own type-specific properties)
+  original_properties jsonb,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

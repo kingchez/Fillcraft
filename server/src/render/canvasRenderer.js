@@ -1,5 +1,6 @@
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import { resolveAssetSource } from '../services/storage.js';
+import { getIconPng } from '../services/icons.js';
 
 export async function getImageDimensions(buffer) {
   const img = await loadImage(buffer);
@@ -178,6 +179,116 @@ function drawTextRegion(ctx, region, rawText) {
   ctx.restore();
 }
 
+function regularPolygonPoints(cx, cy, radius, sides) {
+  const points = [];
+  const step = (2 * Math.PI) / sides;
+  const start = -Math.PI / 2; // point facing up
+  for (let i = 0; i < sides; i++) {
+    const angle = start + i * step;
+    points.push([cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)]);
+  }
+  return points;
+}
+
+function drawShapeRegion(ctx, region) {
+  const {
+    x, y, width, height,
+    shape_type = 'rectangle',
+    fill_color, stroke_color, stroke_width = 0,
+    corner_radius = 0, opacity = 1, rotation = 0, sides = 6,
+  } = region;
+
+  ctx.save();
+  ctx.globalAlpha = opacity ?? 1;
+
+  if (rotation) {
+    ctx.translate(x + width / 2, y + height / 2);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.translate(-(x + width / 2), -(y + height / 2));
+  }
+
+  ctx.beginPath();
+  if (shape_type === 'circle') {
+    ctx.ellipse(x + width / 2, y + height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
+  } else if (shape_type === 'line') {
+    ctx.moveTo(x, y + height / 2);
+    ctx.lineTo(x + width, y + height / 2);
+  } else if (shape_type === 'arrow') {
+    const midY = y + height / 2;
+    const headSize = Math.min(height, width * 0.25);
+    ctx.moveTo(x, midY);
+    ctx.lineTo(x + width - headSize, midY);
+  } else if (shape_type === 'polygon') {
+    const cx = x + width / 2, cy = y + height / 2;
+    const radius = Math.min(width, height) / 2;
+    const points = regularPolygonPoints(cx, cy, radius, Math.max(3, sides));
+    points.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
+    ctx.closePath();
+  } else {
+    roundRectPath(ctx, x, y, width, height, corner_radius);
+  }
+
+  if (fill_color && shape_type !== 'line' && shape_type !== 'arrow') {
+    ctx.fillStyle = fill_color;
+    ctx.fill();
+  }
+  if (stroke_width > 0 && stroke_color) {
+    ctx.lineWidth = stroke_width;
+    ctx.strokeStyle = stroke_color;
+    ctx.stroke();
+  } else if (shape_type === 'line') {
+    // A line has no fill — draw it as a stroke even if stroke props weren't set.
+    ctx.lineWidth = stroke_width || Math.max(2, height * 0.1);
+    ctx.strokeStyle = stroke_color || fill_color || '#000000';
+    ctx.stroke();
+  }
+
+  if (shape_type === 'arrow') {
+    const midY = y + height / 2;
+    const headSize = Math.min(height, width * 0.25);
+    ctx.lineWidth = stroke_width || Math.max(2, height * 0.1);
+    ctx.strokeStyle = stroke_color || fill_color || '#000000';
+    ctx.stroke(); // shaft, drawn above as a moveTo/lineTo path
+    ctx.beginPath();
+    ctx.moveTo(x + width, midY);
+    ctx.lineTo(x + width - headSize, midY - headSize / 2);
+    ctx.lineTo(x + width - headSize, midY + headSize / 2);
+    ctx.closePath();
+    ctx.fillStyle = stroke_color || fill_color || '#000000';
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+async function drawIconRegion(ctx, region) {
+  const { x, y, width, height, icon_name, icon_color = '#000000', opacity = 1, rotation = 0 } = region;
+  if (!icon_name) return;
+
+  let img;
+  try {
+    const pngBuffer = await getIconPng(icon_name, { color: icon_color, sizePx: Math.max(width, height) * 2 });
+    img = await loadImage(pngBuffer);
+  } catch (err) {
+    console.error(`[render] failed to load icon "${icon_name}":`, err.message);
+    return;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = opacity ?? 1;
+
+  if (rotation) {
+    ctx.translate(x + width / 2, y + height / 2);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.translate(-(x + width / 2), -(y + height / 2));
+  }
+
+  const s = Math.min(width / img.width, height / img.height);
+  const dw = img.width * s, dh = img.height * s;
+  ctx.drawImage(img, x + (width - dw) / 2, y + (height - dh) / 2, dw, dh);
+  ctx.restore();
+}
+
 // Renders a template with the given field values (keyed by region label) and
 // returns a PNG buffer. Entirely in-memory — no disk writes.
 export async function renderTemplate(template, values = {}) {
@@ -202,6 +313,10 @@ export async function renderTemplate(template, values = {}) {
       if (text !== undefined && text !== null) {
         drawTextRegion(ctx, region, text);
       }
+    } else if (region.type === 'shape') {
+      drawShapeRegion(ctx, region);
+    } else if (region.type === 'icon') {
+      await drawIconRegion(ctx, region);
     }
   }
 

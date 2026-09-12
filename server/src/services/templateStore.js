@@ -134,6 +134,7 @@ function serializeRegion(r) {
     ...r,
     original_style: r.original_style ? JSON.stringify(r.original_style) : null,
     current_style: r.current_style ? JSON.stringify(r.current_style) : null,
+    original_properties: r.original_properties ? JSON.stringify(r.original_properties) : null,
     auto_shrink_to_fit: r.auto_shrink_to_fit ? 1 : 0,
   };
 }
@@ -143,6 +144,7 @@ function deserializeRegion(r) {
     ...r,
     original_style: r.original_style ? safeParse(r.original_style) : null,
     current_style: r.current_style ? safeParse(r.current_style) : null,
+    original_properties: r.original_properties ? safeParse(r.original_properties) : null,
     auto_shrink_to_fit: !!r.auto_shrink_to_fit,
   };
 }
@@ -156,10 +158,12 @@ function safeParse(v) {
   }
 }
 
+const LABEL_PREFIX = { image: 'image', text: 'sentence', shape: 'shape', icon: 'icon' };
+
 export async function nextRegionLabel(template_id, type) {
   const existing = await getTemplate(template_id);
   const count = (existing?.template_regions || []).filter((r) => r.type === type).length;
-  const prefix = type === 'image' ? 'image' : 'sentence';
+  const prefix = LABEL_PREFIX[type] || type;
   return `${prefix}_${count + 1}`;
 }
 
@@ -176,6 +180,14 @@ const REGION_DEFAULTS = {
   border_width: 0,
   border_color: null,
   filter: null,
+  shape_type: null,
+  fill_color: null,
+  stroke_color: null,
+  stroke_width: 0,
+  sides: null,
+  icon_name: null,
+  icon_color: null,
+  original_properties: null,
 };
 
 export async function createRegion(template_id, region) {
@@ -192,9 +204,9 @@ export async function createRegion(template_id, region) {
   localDb
     .prepare(
       `INSERT INTO template_regions
-        (id, template_id, type, label, x, y, width, height, z_index, max_characters, original_style, current_style, auto_shrink_to_fit, fit_mode, corner_radius, opacity, rotation, border_width, border_color, filter, created_at, updated_at)
+        (id, template_id, type, label, x, y, width, height, z_index, max_characters, original_style, current_style, auto_shrink_to_fit, fit_mode, corner_radius, opacity, rotation, border_width, border_color, filter, shape_type, fill_color, stroke_color, stroke_width, sides, icon_name, icon_color, original_properties, created_at, updated_at)
        VALUES
-        (@id, @template_id, @type, @label, @x, @y, @width, @height, @z_index, @max_characters, @original_style, @current_style, @auto_shrink_to_fit, @fit_mode, @corner_radius, @opacity, @rotation, @border_width, @border_color, @filter, @created_at, @updated_at)`
+        (@id, @template_id, @type, @label, @x, @y, @width, @height, @z_index, @max_characters, @original_style, @current_style, @auto_shrink_to_fit, @fit_mode, @corner_radius, @opacity, @rotation, @border_width, @border_color, @filter, @shape_type, @fill_color, @stroke_color, @stroke_width, @sides, @icon_name, @icon_color, @original_properties, @created_at, @updated_at)`
     )
     .run(local);
 
@@ -217,9 +229,9 @@ export async function updateRegion(id, patch) {
   localDb
     .prepare(
       `INSERT OR REPLACE INTO template_regions
-        (id, template_id, type, label, x, y, width, height, z_index, max_characters, original_style, current_style, auto_shrink_to_fit, fit_mode, corner_radius, opacity, rotation, border_width, border_color, filter, created_at, updated_at)
+        (id, template_id, type, label, x, y, width, height, z_index, max_characters, original_style, current_style, auto_shrink_to_fit, fit_mode, corner_radius, opacity, rotation, border_width, border_color, filter, shape_type, fill_color, stroke_color, stroke_width, sides, icon_name, icon_color, original_properties, created_at, updated_at)
        VALUES
-        (@id, @template_id, @type, @label, @x, @y, @width, @height, @z_index, @max_characters, @original_style, @current_style, @auto_shrink_to_fit, @fit_mode, @corner_radius, @opacity, @rotation, @border_width, @border_color, @filter, @created_at, @updated_at)`
+        (@id, @template_id, @type, @label, @x, @y, @width, @height, @z_index, @max_characters, @original_style, @current_style, @auto_shrink_to_fit, @fit_mode, @corner_radius, @opacity, @rotation, @border_width, @border_color, @filter, @shape_type, @fill_color, @stroke_color, @stroke_width, @sides, @icon_name, @icon_color, @original_properties, @created_at, @updated_at)`
     )
     .run(local);
 

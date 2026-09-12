@@ -77,33 +77,78 @@ export default async function templatesRoutes(app) {
 
   app.post('/:id/regions', async (req, reply) => {
     const body = req.body || {};
-    if (!['image', 'text'].includes(body.type)) {
-      return reply.code(400).send({ error: 'type must be "image" or "text"' });
+    if (!['image', 'text', 'shape', 'icon'].includes(body.type)) {
+      return reply.code(400).send({ error: 'type must be "image", "text", "shape", or "icon"' });
     }
 
     const label = body.label || (await nextRegionLabel(req.params.id, body.type));
+    let payload;
 
-    const region = await createRegion(req.params.id, {
-      type: body.type,
-      label,
-      x: body.x,
-      y: body.y,
-      width: body.width,
-      height: body.height,
-      z_index: body.z_index ?? 0,
-      max_characters: body.type === 'text' ? body.max_characters ?? null : null,
-      original_style: body.type === 'text' ? body.original_style ?? null : null,
-      current_style: body.type === 'text' ? body.current_style ?? body.original_style ?? null : null,
-      auto_shrink_to_fit: body.auto_shrink_to_fit ?? true,
-      fit_mode: body.type === 'image' ? body.fit_mode ?? 'cover' : null,
-      corner_radius: body.corner_radius ?? 0,
-      opacity: body.opacity ?? 1,
-      rotation: body.rotation ?? 0,
-      border_width: body.border_width ?? 0,
-      border_color: body.border_color ?? null,
-      filter: body.filter ?? null,
-    });
+    if (body.type === 'text') {
+      const style = body.original_style || {};
+      payload = {
+        type: 'text',
+        label,
+        x: body.x, y: body.y, width: body.width, height: body.height,
+        z_index: body.z_index ?? 0,
+        max_characters: body.max_characters ?? null,
+        original_style: style,
+        current_style: style,
+        auto_shrink_to_fit: body.auto_shrink_to_fit ?? true,
+      };
+    } else if (body.type === 'image') {
+      const props = {
+        fit_mode: body.fit_mode ?? 'cover',
+        corner_radius: body.corner_radius ?? 0,
+        opacity: body.opacity ?? 1,
+        rotation: body.rotation ?? 0,
+        border_width: body.border_width ?? 0,
+        border_color: body.border_color ?? null,
+        filter: body.filter ?? null,
+      };
+      payload = {
+        type: 'image', label,
+        x: body.x, y: body.y, width: body.width, height: body.height,
+        z_index: body.z_index ?? 0,
+        ...props,
+        original_properties: props,
+      };
+    } else if (body.type === 'shape') {
+      const props = {
+        shape_type: body.shape_type ?? 'rectangle',
+        fill_color: body.fill_color ?? '#D9A441',
+        stroke_color: body.stroke_color ?? null,
+        stroke_width: body.stroke_width ?? 0,
+        corner_radius: body.corner_radius ?? 0,
+        opacity: body.opacity ?? 1,
+        rotation: body.rotation ?? 0,
+        sides: body.sides ?? 6,
+      };
+      payload = {
+        type: 'shape', label,
+        x: body.x, y: body.y, width: body.width, height: body.height,
+        z_index: body.z_index ?? 0,
+        ...props,
+        original_properties: props,
+      };
+    } else {
+      // icon
+      const props = {
+        icon_name: body.icon_name ?? 'mdi:star',
+        icon_color: body.icon_color ?? '#D9A441',
+        opacity: body.opacity ?? 1,
+        rotation: body.rotation ?? 0,
+      };
+      payload = {
+        type: 'icon', label,
+        x: body.x, y: body.y, width: body.width, height: body.height,
+        z_index: body.z_index ?? 0,
+        ...props,
+        original_properties: props,
+      };
+    }
 
+    const region = await createRegion(req.params.id, payload);
     reply.code(201).send(region);
   });
 
@@ -117,12 +162,18 @@ export default async function templatesRoutes(app) {
     reply.code(204).send();
   });
 
-  // Copies original_style back onto current_style for one text region.
+  // Whole-style reset (text: current_style <- original_style;
+  // image/shape/icon: their flat properties <- original_properties).
   app.post('/:id/regions/:regionId/reset-style', async (req, reply) => {
     const template = await getTemplate(req.params.id);
     const region = (template?.template_regions || []).find((r) => r.id === req.params.regionId);
     if (!region) return reply.code(404).send({ error: 'not_found' });
-    const updated = await updateRegion(region.id, { current_style: region.original_style });
+
+    const patch = region.type === 'text'
+      ? { current_style: region.original_style }
+      : { ...region.original_properties };
+
+    const updated = await updateRegion(region.id, patch);
     reply.send(updated);
   });
 }

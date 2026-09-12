@@ -20,6 +20,13 @@ const DEFAULT_TEXT_STYLE = {
   rotation: 0,
 };
 
+const MODE_TYPE = {
+  'draw-text': 'text',
+  'draw-image': 'image',
+  'draw-shape': 'shape',
+  'draw-icon': 'icon',
+};
+
 export default function EditorPage({ templateId, onBack }) {
   const [template, setTemplate] = useState(null);
   const [mode, setMode] = useState('select'); // 'select' | 'draw-text' | 'draw-image'
@@ -100,7 +107,7 @@ export default function EditorPage({ templateId, onBack }) {
       const box = draft;
       setDraft(null);
       if (box.w > 8 && box.h > 8) {
-        const type = mode === 'draw-image' ? 'image' : 'text';
+        const type = MODE_TYPE[mode] || 'text';
         const payload = {
           type,
           x: toNatural(box.x), y: toNatural(box.y),
@@ -110,8 +117,14 @@ export default function EditorPage({ templateId, onBack }) {
           payload.original_style = DEFAULT_TEXT_STYLE;
           payload.current_style = DEFAULT_TEXT_STYLE;
           payload.max_characters = 200;
-        } else {
+        } else if (type === 'image') {
           payload.fit_mode = 'cover';
+        } else if (type === 'shape') {
+          payload.shape_type = 'rectangle';
+          payload.fill_color = '#D9A441';
+        } else if (type === 'icon') {
+          payload.icon_name = 'mdi:star';
+          payload.icon_color = '#D9A441';
         }
         const region = await api.createRegion(templateId, payload);
         setTemplate((t) => ({ ...t, template_regions: [...t.template_regions, region] }));
@@ -193,8 +206,10 @@ export default function EditorPage({ templateId, onBack }) {
         />
         <div className="mode-buttons">
           <button className={mode === 'select' ? 'active' : ''} onClick={() => setMode('select')}>Select / Move</button>
-          <button className={mode === 'draw-text' ? 'active' : ''} onClick={() => setMode('draw-text')}>+ Draw text region</button>
-          <button className={mode === 'draw-image' ? 'active' : ''} onClick={() => setMode('draw-image')}>+ Draw image region</button>
+          <button className={mode === 'draw-text' ? 'active' : ''} onClick={() => setMode('draw-text')}>+ Text</button>
+          <button className={mode === 'draw-image' ? 'active' : ''} onClick={() => setMode('draw-image')}>+ Image</button>
+          <button className={mode === 'draw-shape' ? 'active' : ''} onClick={() => setMode('draw-shape')}>+ Shape</button>
+          <button className={mode === 'draw-icon' ? 'active' : ''} onClick={() => setMode('draw-icon')}>+ Icon</button>
         </div>
         <button className="primary-btn" onClick={() => setPreviewOpen(true)}>Preview autofill</button>
       </div>
@@ -231,7 +246,7 @@ export default function EditorPage({ templateId, onBack }) {
 
           {draft && (
             <div
-              className={`region-box draft ${mode === 'draw-image' ? 'image' : 'text'}`}
+              className={`region-box draft ${MODE_TYPE[mode] || 'text'}`}
               style={{ left: draft.x, top: draft.y, width: draft.w, height: draft.h }}
             />
           )}
@@ -272,7 +287,7 @@ export default function EditorPage({ templateId, onBack }) {
             <h3>Preview autofill</h3>
             <div className="preview-layout">
               <div className="preview-fields">
-                {regions.map((r) => (
+                {regions.filter((r) => r.type === 'text' || r.type === 'image').map((r) => (
                   <div className="field" key={r.id}>
                     <label>{r.label} {r.type === 'text' && r.max_characters ? `(max ${r.max_characters} chars)` : ''}</label>
                     {r.type === 'text' ? (
@@ -290,6 +305,9 @@ export default function EditorPage({ templateId, onBack }) {
                     )}
                   </div>
                 ))}
+                {regions.some((r) => r.type === 'shape' || r.type === 'icon') && (
+                  <div className="hint-text">Shapes and icons render automatically using their saved styling — nothing to fill in for those.</div>
+                )}
                 <button className="primary-btn" onClick={runPreview} disabled={previewBusy}>
                   {previewBusy ? 'Rendering…' : 'Render preview'}
                 </button>

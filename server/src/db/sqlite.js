@@ -47,6 +47,14 @@ export function ensureLocalSchema() {
       border_width REAL,
       border_color TEXT,
       filter TEXT,
+      shape_type TEXT,
+      fill_color TEXT,
+      stroke_color TEXT,
+      stroke_width REAL,
+      sides INTEGER,
+      icon_name TEXT,
+      icon_color TEXT,
+      original_properties TEXT,
       created_at TEXT,
       updated_at TEXT
     );
