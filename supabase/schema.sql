@@ -72,5 +72,18 @@ create table if not exists custom_fonts (
   created_at timestamptz not null default now()
 );
 
+-- Single-row table holding the connected Canva account's OAuth tokens.
+-- Fillcraft is a personal, single-user tool, so one row is sufficient —
+-- id is always 'default'.
+create table if not exists canva_connection (
+  id text primary key default 'default',
+  access_token text not null,
+  refresh_token text not null,
+  scope text,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_template_regions_template_id on template_regions(template_id);
 create index if not exists idx_templates_category_id on templates(category_id);

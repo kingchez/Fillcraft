@@ -22,6 +22,20 @@ export const api = {
     }).then(handle),
   deleteCategory: (id) => fetch(`${BASE}/categories/${id}`, { method: 'DELETE' }).then(handle),
 
+  // Canva
+  canvaStatus: () => fetch(`${BASE}/canva/status`).then(handle),
+  canvaDisconnect: () => fetch(`${BASE}/canva/disconnect`, { method: 'POST' }).then(handle),
+  canvaListDesigns: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return fetch(`${BASE}/canva/designs${qs ? `?${qs}` : ''}`).then(handle);
+  },
+  canvaImportDesign: (designId, opts = {}) =>
+    fetch(`${BASE}/canva/import/${designId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts),
+    }).then(handle),
+
   // Templates
   listTemplates: () => fetch(`${BASE}/templates`).then(handle),
   getTemplate: (id) => fetch(`${BASE}/templates/${id}`).then(handle),

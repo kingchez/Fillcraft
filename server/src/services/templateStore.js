@@ -292,3 +292,42 @@ export async function createCustomFont({ family_name, file_url }) {
     .run(id, family_name, file_url, created_at);
   return { id, family_name, file_url, created_at };
 }
+
+// ---------------- Canva connection (single row: id = 'default') ----------------
+
+export async function getCanvaConnection() {
+  if (supabaseAvailable()) {
+    const { data, error } = await supabase.from('canva_connection').select('*').eq('id', 'default').maybeSingle();
+    if (!error) return data;
+    console.error('[templateStore] getCanvaConnection supabase error, falling back:', error.message);
+  }
+  return localDb.prepare('SELECT * FROM canva_connection WHERE id = ?').get('default') || null;
+}
+
+export async function saveCanvaConnection({ access_token, refresh_token, scope, expires_at }) {
+  const updated_at = nowIso();
+  const row = { id: 'default', access_token, refresh_token, scope: scope || null, expires_at, updated_at };
+
+  if (supabaseAvailable()) {
+    const { error } = await supabase.from('canva_connection').upsert({ ...row, created_at: updated_at });
+    if (error) console.error('[templateStore] saveCanvaConnection supabase error:', error.message);
+  }
+
+  const existing = localDb.prepare('SELECT created_at FROM canva_connection WHERE id = ?').get('default');
+  const created_at = existing?.created_at || updated_at;
+  localDb
+    .prepare(
+      `INSERT OR REPLACE INTO canva_connection (id, access_token, refresh_token, scope, expires_at, created_at, updated_at)
+       VALUES (@id, @access_token, @refresh_token, @scope, @expires_at, @created_at, @updated_at)`
+    )
+    .run({ ...row, created_at });
+
+  return row;
+}
+
+export async function clearCanvaConnection() {
+  if (supabaseAvailable()) {
+    await supabase.from('canva_connection').delete().eq('id', 'default');
+  }
+  localDb.prepare('DELETE FROM canva_connection WHERE id = ?').run('default');
+}

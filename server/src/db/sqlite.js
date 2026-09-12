@@ -65,6 +65,16 @@ export function ensureLocalSchema() {
       file_url TEXT,
       created_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS canva_connection (
+      id TEXT PRIMARY KEY,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      scope TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT,
+      updated_at TEXT
+    );
   `);
 }
 

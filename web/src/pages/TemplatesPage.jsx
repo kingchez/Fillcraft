@@ -9,6 +9,9 @@ export default function TemplatesPage({ onOpenTemplate }) {
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [showNewCategory, setShowNewCategory] = useState(false);
+  const [showCanvaImport, setShowCanvaImport] = useState(false);
+  const [canvaStatus, setCanvaStatus] = useState({ configured: false, connected: false });
+  const [banner, setBanner] = useState(null);
 
   async function refresh() {
     setLoading(true);
@@ -18,7 +21,23 @@ export default function TemplatesPage({ onOpenTemplate }) {
     setLoading(false);
   }
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+    api.canvaStatus().then(setCanvaStatus).catch(() => {});
+
+    // Detect the redirect back from Canva's OAuth flow (?canva=connected / ?canva=error&message=...)
+    const params = new URLSearchParams(window.location.search);
+    const canvaResult = params.get('canva');
+    if (canvaResult === 'connected') {
+      setBanner({ type: 'success', text: 'Canva connected — you can now import designs directly.' });
+      api.canvaStatus().then(setCanvaStatus).catch(() => {});
+    } else if (canvaResult === 'error') {
+      setBanner({ type: 'error', text: `Canva connection failed: ${params.get('message') || 'unknown error'}` });
+    }
+    if (canvaResult) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   const filtered =
     activeCategory === 'all'
@@ -36,6 +55,12 @@ export default function TemplatesPage({ onOpenTemplate }) {
     if (activeCategory === cat.id) setActiveCategory('all');
     await api.deleteCategory(cat.id);
     refresh();
+  }
+
+  async function handleCanvaDisconnect() {
+    if (!confirm('Disconnect Canva? You can reconnect any time.')) return;
+    await api.canvaDisconnect();
+    setCanvaStatus((s) => ({ ...s, connected: false }));
   }
 
   return (
@@ -65,14 +90,39 @@ export default function TemplatesPage({ onOpenTemplate }) {
         <button className="ghost-btn full new-cat-btn" onClick={() => setShowNewCategory(true)}>
           + New category
         </button>
+
+        <div className="sidebar-title canva-title">Canva</div>
+        {canvaStatus.connected ? (
+          <>
+            <div className="canva-status connected">● Connected</div>
+            <button className="ghost-btn full" onClick={handleCanvaDisconnect}>Disconnect</button>
+          </>
+        ) : canvaStatus.configured ? (
+          <a className="ghost-btn full canva-connect-link" href="/api/canva/connect">Connect to Canva</a>
+        ) : (
+          <div className="hint-text">Add CANVA_CLIENT_ID/SECRET/REDIRECT_URI to enable.</div>
+        )}
       </div>
 
       <div className="content">
+        {banner && (
+          <div className={`banner ${banner.type}`}>
+            {banner.text}
+            <span className="banner-close" onClick={() => setBanner(null)}>✕</span>
+          </div>
+        )}
         <div className="content-header">
           <h2>Templates</h2>
-          <button className="primary-btn" onClick={() => setShowUpload(true)}>
-            + Upload template
-          </button>
+          <div className="header-actions">
+            {canvaStatus.connected && (
+              <button className="ghost-btn" onClick={() => setShowCanvaImport(true)}>
+                🎨 Import from Canva
+              </button>
+            )}
+            <button className="primary-btn" onClick={() => setShowUpload(true)}>
+              + Upload template
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -120,6 +170,17 @@ export default function TemplatesPage({ onOpenTemplate }) {
           onCreated={() => {
             setShowNewCategory(false);
             refresh();
+          }}
+        />
+      )}
+
+      {showCanvaImport && (
+        <CanvaImportModal
+          categories={categories}
+          onClose={() => setShowCanvaImport(false)}
+          onImported={(t) => {
+            setShowCanvaImport(false);
+            refresh().then(() => onOpenTemplate(t.id));
           }}
         />
       )}
@@ -211,6 +272,110 @@ function NewCategoryModal({ onClose, onCreated }) {
         <div className="modal-actions">
           <button className="ghost-btn" onClick={onClose}>Cancel</button>
           <button className="primary-btn" onClick={submit} disabled={busy}>Create</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CanvaImportModal({ categories, onClose, onImported }) {
+  const [designs, setDesigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [continuation, setContinuation] = useState(null);
+  const [importingId, setImportingId] = useState(null);
+  const [categoryId, setCategoryId] = useState('');
+
+  async function load(opts = {}) {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await api.canvaListDesigns({ query: query || undefined, ...opts });
+      setDesigns((prev) => (opts.continuation ? [...prev, ...result.items] : result.items));
+      setContinuation(result.continuation);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function handleImport(design) {
+    setImportingId(design.id);
+    try {
+      const template = await api.canvaImportDesign(design.id, {
+        name: design.title,
+        category_id: categoryId || null,
+      });
+      onImported(template);
+    } catch (err) {
+      setError(`Failed to import "${design.title}": ${err.message}`);
+      setImportingId(null);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <h3>Import from Canva</h3>
+
+        <div className="field row2">
+          <div style={{ flex: 2 }}>
+            <label>Search your designs</label>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && load()}
+              placeholder="Search by title…"
+            />
+          </div>
+          <div>
+            <label>Import into category</label>
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value="">No category</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {error && <div className="error-text">{error}</div>}
+
+        {loading && designs.length === 0 ? (
+          <div className="empty-state">Loading your Canva designs…</div>
+        ) : designs.length === 0 ? (
+          <div className="empty-state">No designs found.</div>
+        ) : (
+          <div className="canva-design-grid">
+            {designs.map((d) => (
+              <div key={d.id} className="canva-design-card">
+                <div className="canva-design-thumb">
+                  {d.thumbnail_url ? <img src={d.thumbnail_url} alt={d.title} /> : <div className="no-thumb">No preview</div>}
+                </div>
+                <div className="canva-design-title">{d.title}</div>
+                <button
+                  className="primary-btn full"
+                  onClick={() => handleImport(d)}
+                  disabled={importingId !== null}
+                >
+                  {importingId === d.id ? 'Importing…' : 'Import'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {continuation && !loading && (
+          <button className="ghost-btn full" onClick={() => load({ continuation })}>Load more</button>
+        )}
+
+        <div className="modal-actions">
+          <button className="ghost-btn" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>
