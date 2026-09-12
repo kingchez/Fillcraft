@@ -38,7 +38,28 @@ await app.register(cors, { origin: true });
 await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
 
 ensureLocalSchema();
-await registerAllCustomFonts();
+
+// Registering custom fonts touches Supabase at startup. If Supabase is slow
+// or briefly unreachable, this must never block the server from listening —
+// that would turn a Supabase blip into total downtime, defeating the whole
+// point of having a local fallback. Bounded with a timeout and never fatal.
+async function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+try {
+  await withTimeout(registerAllCustomFonts(), 8000, 'registerAllCustomFonts');
+} catch (err) {
+  app.log.warn(`Custom font registration skipped at startup (will retry per-render as needed): ${err.message}`);
+}
 
 app.get('/api/health', async () => ({ ok: true, time: new Date().toISOString() }));
 

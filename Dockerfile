@@ -1,5 +1,5 @@
 # ---- Stage 1: build the admin frontend ----
-FROM node:20-bookworm-slim AS web-build
+FROM node:22-bookworm-slim AS web-build
 WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm install
@@ -7,7 +7,7 @@ COPY web/ ./
 RUN npm run build
 
 # ---- Stage 2: server + runtime ----
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 WORKDIR /app
 
 # @napi-rs/canvas ships prebuilt binaries for most platforms, but a few
