@@ -26,7 +26,14 @@ export const api = {
   canvaStatus: () => fetch(`${BASE}/canva/status`).then(handle),
   canvaDisconnect: () => fetch(`${BASE}/canva/disconnect`, { method: 'POST' }).then(handle),
   canvaListDesigns: (params = {}) => {
-    const qs = new URLSearchParams(params).toString();
+    // Strip undefined/null/empty values before building the query string —
+    // URLSearchParams otherwise stringifies `undefined` itself as the text
+    // "undefined", turning "no search term" into a literal search for the
+    // word "undefined" and silently returning zero results.
+    const clean = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    );
+    const qs = new URLSearchParams(clean).toString();
     return fetch(`${BASE}/canva/designs${qs ? `?${qs}` : ''}`).then(handle);
   },
   canvaImportDesign: (designId, opts = {}) =>
