@@ -22,8 +22,12 @@ export async function listDesigns({ continuation, query } = {}) {
   const params = new URLSearchParams();
   if (continuation) params.set('continuation', continuation);
   if (query) params.set('query', query);
+  // "relevance" (Canva's default) only makes sense with a search term. With
+  // no query, sort by most-recently-modified so browsing without searching
+  // still shows something sensible instead of an arbitrary/sparse-looking order.
+  params.set('sort_by', query ? 'relevance' : 'modified_descending');
   const qs = params.toString();
-  const data = await canvaFetch(`/designs${qs ? `?${qs}` : ''}`);
+  const data = await canvaFetch(`/designs?${qs}`);
   return {
     items: (data.items || []).map((d) => ({
       id: d.id,
