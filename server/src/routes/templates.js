@@ -8,12 +8,26 @@ import {
   updateRegion,
   deleteRegion,
   nextRegionLabel,
+  matchTemplates,
 } from '../services/templateStore.js';
 import { storeAsset } from '../services/storage.js';
 import { getImageDimensions } from '../render/canvasRenderer.js';
 
 export default async function templatesRoutes(app) {
   app.get('/', async () => listTemplates());
+
+  // Finds templates that can fit a given amount of text, optionally scoped
+  // to a category, sorted least-recently-used first (never-used templates
+  // first) — for picking a template that spreads usage across your library
+  // rather than always returning the same one.
+  // GET /api/templates/match?content_length=180&category_id=...
+  app.get('/match', async (req) => {
+    const { content_length, category_id } = req.query || {};
+    return matchTemplates({
+      content_length: content_length !== undefined ? Number(content_length) : undefined,
+      category_id: category_id || undefined,
+    });
+  });
 
   app.get('/:id', async (req, reply) => {
     const template = await getTemplate(req.params.id);
@@ -22,7 +36,8 @@ export default async function templatesRoutes(app) {
   });
 
   // Create a template from an uploaded image (multipart: file field "image",
-  // plus optional fields "name" and "category_id").
+  // plus optional fields "name" and "category_ids" — a JSON-stringified
+  // array, e.g. '["id1","id2"]'; omit or send '[]' for no category).
   app.post('/', async (req, reply) => {
     if (!req.isMultipart()) {
       return reply.code(400).send({ error: 'expected multipart/form-data with an "image" file' });
@@ -47,12 +62,17 @@ export default async function templatesRoutes(app) {
       return reply.code(400).send({ error: 'image file is required' });
     }
 
+    let category_ids = [];
+    if (fields.category_ids) {
+      try { category_ids = JSON.parse(fields.category_ids); } catch { category_ids = []; }
+    }
+
     const { width, height } = await getImageDimensions(fileBuffer);
     const asset = await storeAsset(fileBuffer, filename || 'template.png', mimetype || 'image/png');
 
     const template = await createTemplate({
       name: fields.name || 'Untitled Template',
-      category_id: fields.category_id || null,
+      category_ids,
       canva_design_id: fields.canva_design_id || null,
       source_image_url: asset.url,
       thumbnail_url: asset.url,

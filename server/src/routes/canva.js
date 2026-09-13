@@ -83,7 +83,7 @@ export default async function canvaRoutes(app) {
       return reply.code(501).send({ error: 'canva_not_configured' });
     }
     const { designId } = req.params;
-    const { category_id, name } = req.body || {};
+    const { category_ids, name } = req.body || {};
 
     try {
       const design = await getDesign(designId).catch(() => null);
@@ -102,7 +102,7 @@ export default async function canvaRoutes(app) {
 
       const template = await createTemplate({
         name: name || design?.title || 'Canva Import',
-        category_id: category_id || null,
+        category_ids: category_ids || [],
         canva_design_id: designId,
         source_image_url: asset.url,
         thumbnail_url: asset.url,

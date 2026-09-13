@@ -11,26 +11,33 @@ localDb.pragma('journal_mode = WAL');
 
 export function ensureLocalSchema() {
   localDb.exec(`
-    CREATE TABLE IF NOT EXISTS categories (
+    CREATE TABLE IF NOT EXISTS fillcraft_categories (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       created_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS templates (
+    CREATE TABLE IF NOT EXISTS fillcraft_templates (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      category_id TEXT,
       canva_design_id TEXT,
       source_image_url TEXT,
       thumbnail_url TEXT,
       width INTEGER,
       height INTEGER,
+      total_max_characters INTEGER DEFAULT 0,
+      extra_character_allowance INTEGER DEFAULT 0,
       created_at TEXT,
       updated_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS template_regions (
+    CREATE TABLE IF NOT EXISTS fillcraft_template_categories (
+      template_id TEXT NOT NULL,
+      category_id TEXT NOT NULL,
+      PRIMARY KEY (template_id, category_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS fillcraft_template_regions (
       id TEXT PRIMARY KEY,
       template_id TEXT NOT NULL,
       type TEXT NOT NULL,
@@ -59,14 +66,14 @@ export function ensureLocalSchema() {
       updated_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS custom_fonts (
+    CREATE TABLE IF NOT EXISTS fillcraft_custom_fonts (
       id TEXT PRIMARY KEY,
       family_name TEXT NOT NULL,
       file_url TEXT,
       created_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS canva_connection (
+    CREATE TABLE IF NOT EXISTS fillcraft_canva_connection (
       id TEXT PRIMARY KEY,
       access_token TEXT NOT NULL,
       refresh_token TEXT NOT NULL,
@@ -74,6 +81,13 @@ export function ensureLocalSchema() {
       expires_at TEXT NOT NULL,
       created_at TEXT,
       updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS fillcraft_template_usage_log (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL,
+      used_at TEXT,
+      source TEXT
     );
   `);
 }

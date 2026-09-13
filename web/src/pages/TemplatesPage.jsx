@@ -42,11 +42,11 @@ export default function TemplatesPage({ onOpenTemplate }) {
   const filtered =
     activeCategory === 'all'
       ? templates
-      : templates.filter((t) => t.category_id === activeCategory);
+      : templates.filter((t) => (t.category_ids || []).includes(activeCategory));
 
   async function handleDeleteCategory(e, cat) {
     e.stopPropagation();
-    const count = templates.filter((t) => t.category_id === cat.id).length;
+    const count = templates.filter((t) => (t.category_ids || []).includes(cat.id)).length;
     const warning =
       count > 0
         ? `Delete "${cat.name}"? ${count} template${count === 1 ? '' : 's'} in it will become uncategorized (not deleted).`
@@ -139,7 +139,7 @@ export default function TemplatesPage({ onOpenTemplate }) {
                 key={t.id}
                 className="template-card"
                 onClick={() => onOpenTemplate(t.id)}
-                style={{ '--card-accent': colorForCategoryId(categories, t.category_id) }}
+                style={{ '--card-accent': colorForCategoryId(categories, (t.category_ids || [])[0]) }}
               >
                 <div className="template-card-accent" />
                 <div className="template-thumb">
@@ -149,7 +149,15 @@ export default function TemplatesPage({ onOpenTemplate }) {
                 <div className="template-meta">
                   {(t.template_regions || []).length} region
                   {(t.template_regions || []).length === 1 ? '' : 's'}
+                  {t.usage_count > 0 && <span className="usage-badge"> · used {t.usage_count}×</span>}
                 </div>
+                {(t.category_ids || []).length > 0 && (
+                  <div className="template-cat-dots">
+                    {t.category_ids.map((cid) => (
+                      <span key={cid} className="mini-dot" style={{ background: colorForCategoryId(categories, cid) }} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -193,10 +201,14 @@ export default function TemplatesPage({ onOpenTemplate }) {
 
 function UploadModal({ categories, onClose, onCreated }) {
   const [name, setName] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  const [categoryIds, setCategoryIds] = useState([]);
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  function toggleCategory(id) {
+    setCategoryIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  }
 
   async function submit() {
     if (!file) { setError('Choose an image file first.'); return; }
@@ -206,7 +218,7 @@ function UploadModal({ categories, onClose, onCreated }) {
       const fd = new FormData();
       fd.append('image', file);
       fd.append('name', name || file.name);
-      if (categoryId) fd.append('category_id', categoryId);
+      fd.append('category_ids', JSON.stringify(categoryIds));
       const template = await api.createTemplate(fd);
       onCreated(template);
     } catch (err) {
@@ -229,13 +241,20 @@ function UploadModal({ categories, onClose, onCreated }) {
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Instagram Quote Post" />
         </div>
         <div className="field">
-          <label>Category (optional — leave blank if this template doesn't need one)</label>
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">No category</option>
+          <label>Categories (optional — pick none, one, or several)</label>
+          <div className="category-checklist">
+            {categories.length === 0 && <div className="hint-text">No categories yet.</div>}
             {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <label key={c.id} className="category-check-row">
+                <input
+                  type="checkbox"
+                  checked={categoryIds.includes(c.id)}
+                  onChange={() => toggleCategory(c.id)}
+                />
+                {c.name}
+              </label>
             ))}
-          </select>
+          </div>
         </div>
         {error && <div className="error-text">{error}</div>}
         <div className="modal-actions">
@@ -314,7 +333,11 @@ function CanvaImportModal({ categories, onClose, onImported }) {
   const [query, setQuery] = useState('');
   const [continuation, setContinuation] = useState(null);
   const [importingId, setImportingId] = useState(null);
-  const [categoryId, setCategoryId] = useState('');
+  const [categoryIds, setCategoryIds] = useState([]);
+
+  function toggleCategory(id) {
+    setCategoryIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  }
 
   async function load(opts = {}) {
     setLoading(true);
@@ -337,7 +360,7 @@ function CanvaImportModal({ categories, onClose, onImported }) {
     try {
       const template = await api.canvaImportDesign(design.id, {
         name: design.title,
-        category_id: categoryId || null,
+        category_ids: categoryIds,
       });
       onImported(template);
     } catch (err) {
@@ -351,25 +374,25 @@ function CanvaImportModal({ categories, onClose, onImported }) {
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>Import from Canva</h3>
 
-        <div className="field row2">
-          <div style={{ flex: 2 }}>
-            <label>Search your designs</label>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && load()}
-              placeholder="Search by title…"
-            />
-          </div>
-          <div>
-            <label>Import into category</label>
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">No category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+        <div className="field">
+          <label>Search your designs</label>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && load()}
+            placeholder="Search by title…"
+          />
+        </div>
+        <div className="field">
+          <label>Import into categories (optional — pick none, one, or several)</label>
+          <div className="category-checklist row">
+            {categories.map((c) => (
+              <label key={c.id} className="category-check-row">
+                <input type="checkbox" checked={categoryIds.includes(c.id)} onChange={() => toggleCategory(c.id)} />
+                {c.name}
+              </label>
+            ))}
           </div>
         </div>
 

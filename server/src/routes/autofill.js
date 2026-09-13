@@ -1,4 +1,4 @@
-import { getTemplate } from '../services/templateStore.js';
+import { getTemplate, logTemplateUsage } from '../services/templateStore.js';
 import { renderTemplate } from '../render/canvasRenderer.js';
 import { ensureFontsForTemplate } from '../services/fontRegistry.js';
 
@@ -14,6 +14,9 @@ export default async function autofillRoutes(app) {
     try {
       await ensureFontsForTemplate(template);
       const buffer = await renderTemplate(template, req.body || {});
+      // Logged only on a successful render, so usage stats reflect real
+      // output, not failed attempts.
+      logTemplateUsage(template.id, 'autofill').catch((err) => req.log.warn(`usage log failed: ${err.message}`));
       reply.header('Content-Type', 'image/png');
       return reply.send(buffer);
     } catch (err) {

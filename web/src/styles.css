@@ -126,7 +126,14 @@ body {
 .template-thumb { aspect-ratio: 1; background: var(--panel-2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .template-thumb img { width: 100%; height: 100%; object-fit: contain; }
 .template-name { padding: 10px 12px 2px; font-size: 13.5px; font-weight: 700; }
-.template-meta { padding: 0 12px 12px; font-size: 11.5px; color: var(--muted); }
+.template-meta { padding: 0 12px 4px; font-size: 11.5px; color: var(--muted); }
+.usage-badge { color: var(--sky); }
+.template-cat-dots { display: flex; gap: 4px; padding: 0 12px 10px; }
+.mini-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+.category-checklist { max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+.category-checklist.row { display: flex; flex-wrap: wrap; gap: 4px 14px; max-height: none; border: none; padding: 0; }
+.category-check-row { display: flex; align-items: center; gap: 7px; font-size: 13px; padding: 4px 0; cursor: pointer; }
 
 .empty-state, .hint-text { color: var(--muted); font-size: 13px; padding: 20px 0; }
 
