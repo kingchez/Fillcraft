@@ -37,6 +37,13 @@ export const api = {
     }).then(handle),
   deleteCategory: (id) => fetch(`${BASE}/categories/${id}`, { method: 'DELETE' }).then(handle),
 
+  estimateTextCapacity: (params) =>
+    fetch(`${BASE}/utils/estimate-text-capacity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    }).then(handle),
+
   // Canva
   canvaStatus: () => fetch(`${BASE}/canva/status`).then(handle),
   canvaDisconnect: () => fetch(`${BASE}/canva/disconnect`, { method: 'POST' }).then(handle),

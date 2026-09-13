@@ -289,6 +289,41 @@ async function drawIconRegion(ctx, region) {
   ctx.restore();
 }
 
+// Estimates how many characters a text box can hold at a given font/size,
+// using the same wrapping math the real renderer uses — measures an average
+// character width from a representative sample string, then works out how
+// many characters fit per line and how many lines fit in the box height.
+// This is an estimate, not exact: real text has uneven character widths and
+// wraps at word boundaries, so actual capacity will vary a bit either way.
+export function estimateTextCapacity({
+  width,
+  height,
+  font_family = 'sans-serif',
+  font_size = 24,
+  font_weight = 'normal',
+  italic = false,
+  line_height = 1.3,
+}) {
+  const measureCanvas = createCanvas(10, 10);
+  const ctx = measureCanvas.getContext('2d');
+  ctx.font = `${italic ? 'italic ' : ''}${font_weight === 'bold' ? 'bold ' : ''}${font_size}px "${font_family}"`;
+
+  const sample =
+    'the quick brown fox jumps over the lazy dog THE QUICK BROWN FOX JUMPS 0123456789';
+  const avgCharWidth = ctx.measureText(sample).width / sample.length;
+
+  const linesThatFit = Math.max(1, Math.floor(height / (font_size * line_height)));
+  const charsPerLine = Math.max(1, Math.floor(width / avgCharWidth));
+  const estimatedMaxCharacters = linesThatFit * charsPerLine;
+
+  return {
+    estimated_max_characters: estimatedMaxCharacters,
+    lines_that_fit: linesThatFit,
+    chars_per_line: charsPerLine,
+    avg_char_width: avgCharWidth,
+  };
+}
+
 // Renders a template with the given field values (keyed by region label) and
 // returns a PNG buffer. Entirely in-memory — no disk writes.
 export async function renderTemplate(template, values = {}) {

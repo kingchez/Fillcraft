@@ -18,6 +18,8 @@ export default function RegionInspector({ region, onChange, onReset, onDelete })
   const [googleFonts, setGoogleFonts] = useState([]);
   const [customFonts, setCustomFonts] = useState([]);
   const [uploadingFont, setUploadingFont] = useState(false);
+  const [capacityEstimate, setCapacityEstimate] = useState(null);
+  const [sampleText, setSampleText] = useState('');
 
   useEffect(() => {
     api.listGoogleFonts().then(setGoogleFonts).catch(() => {});
@@ -27,6 +29,28 @@ export default function RegionInspector({ region, onChange, onReset, onDelete })
   const style = region.current_style || {};
   const originalStyle = region.original_style || {};
   const originalProps = region.original_properties || {};
+
+  // Recompute the estimated character capacity whenever anything that
+  // affects it changes (box size, font, size, weight, line height).
+  // Debounced slightly so it doesn't fire on every keystroke while resizing.
+  useEffect(() => {
+    if (region.type !== 'text') return;
+    const handle = setTimeout(() => {
+      api
+        .estimateTextCapacity({
+          width: region.width,
+          height: region.height,
+          font_family: style.font_family,
+          font_size: style.font_size,
+          font_weight: style.font_weight,
+          italic: style.italic,
+          line_height: style.line_height,
+        })
+        .then(setCapacityEstimate)
+        .catch(() => setCapacityEstimate(null));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [region.type, region.width, region.height, style.font_family, style.font_size, style.font_weight, style.italic, style.line_height]);
 
   function updateStyle(patch) {
     onChange({ current_style: { ...style, ...patch } });
@@ -86,6 +110,34 @@ export default function RegionInspector({ region, onChange, onReset, onDelete })
               value={region.max_characters ?? ''}
               onChange={(e) => onChange({ max_characters: e.target.value ? Number(e.target.value) : null })}
             />
+          </div>
+
+          {capacityEstimate && (
+            <div className="capacity-hint">
+              📏 Estimated capacity at this size/font: <strong>~{capacityEstimate.estimated_max_characters} characters</strong>
+              {' '}({capacityEstimate.lines_that_fit} line{capacityEstimate.lines_that_fit === 1 ? '' : 's'} × ~{capacityEstimate.chars_per_line}/line)
+              <button
+                type="button"
+                className="use-estimate-btn"
+                onClick={() => onChange({ max_characters: capacityEstimate.estimated_max_characters })}
+              >
+                Use this
+              </button>
+              <p className="field-hint">This is an estimate — real text has uneven character widths and wraps at word boundaries, so actual capacity may vary a little.</p>
+            </div>
+          )}
+
+          <div className="field">
+            <label>Test sample text (not saved — just to check length against the max)</label>
+            <textarea
+              value={sampleText}
+              onChange={(e) => setSampleText(e.target.value)}
+              placeholder="Type or paste sample content here…"
+            />
+            <div className={`char-counter ${region.max_characters && sampleText.length > region.max_characters ? 'over' : ''}`}>
+              {sampleText.length}{region.max_characters ? ` / ${region.max_characters}` : ''} characters
+              {region.max_characters && sampleText.length > region.max_characters && ' — would be truncated'}
+            </div>
           </div>
 
           <div className="field">
