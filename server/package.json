@@ -16,6 +16,9 @@
     "@supabase/supabase-js": "^2.45.4",
     "better-sqlite3": "^11.3.0",
     "dotenv": "^16.4.5",
-    "fastify": "^4.28.1"
+    "fast-xml-parser": "^4.5.0",
+    "fastify": "^4.28.1",
+    "jszip": "^3.10.1",
+    "tesseract.js": "^5.1.1"
   }
 }

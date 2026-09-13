@@ -46,14 +46,17 @@ export async function getDesign(designId) {
 
 // as_single_image flattens a multi-page Canva design into one PNG, matching
 // Fillcraft's template model (one base image + regions drawn on top of it).
-export async function createExportJob(designId) {
+// Pass format: 'pptx' to get a structured PowerPoint export instead, used by
+// the smart-import pipeline to recover real element positions/fonts/colors.
+export async function createExportJob(designId, format = 'png') {
+  const formatSpec =
+    format === 'pptx'
+      ? { type: 'pptx' }
+      : { type: 'png', as_single_image: true, lossless: true };
   const data = await canvaFetch('/exports', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      design_id: designId,
-      format: { type: 'png', as_single_image: true, lossless: true },
-    }),
+    body: JSON.stringify({ design_id: designId, format: formatSpec }),
   });
   return data.job;
 }

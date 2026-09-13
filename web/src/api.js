@@ -107,6 +107,9 @@ export const api = {
       return res.blob();
     }),
 
+  detectTextRegions: (templateId) =>
+    fetch(`${BASE}/templates/${templateId}/detect-text-regions`, { method: 'POST' }).then(handle),
+
   // Fonts
   listGoogleFonts: () => fetch(`${BASE}/fonts/google`).then(handle),
   listCustomFonts: () => fetch(`${BASE}/fonts/custom`).then(handle),

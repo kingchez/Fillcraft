@@ -10,8 +10,10 @@ import {
   nextRegionLabel,
   matchTemplates,
 } from '../services/templateStore.js';
-import { storeAsset } from '../services/storage.js';
+import { storeAsset, resolveAssetSource } from '../services/storage.js';
 import { getImageDimensions } from '../render/canvasRenderer.js';
+import { detectTextBlocks } from '../services/ocr.js';
+import fs from 'fs';
 
 export default async function templatesRoutes(app) {
   app.get('/', async () => listTemplates());
@@ -33,6 +35,30 @@ export default async function templatesRoutes(app) {
     const template = await getTemplate(req.params.id);
     if (!template) return reply.code(404).send({ error: 'not_found' });
     return template;
+  });
+
+  // Runs OCR on the template's source image and returns candidate text
+  // regions (NOT saved) for the admin UI to show as a review overlay — the
+  // user picks which ones to actually keep as real regions. This is an
+  // assist, not magic: works well on clean printed text, less reliably on
+  // stylized/curved/decorative fonts common in Canva designs.
+  app.post('/:id/detect-text-regions', async (req, reply) => {
+    const template = await getTemplate(req.params.id);
+    if (!template) return reply.code(404).send({ error: 'not_found' });
+
+    try {
+      const source = resolveAssetSource(template.source_image_url);
+      const buffer = fs.existsSync(source) ? fs.readFileSync(source) : Buffer.from(await (await fetch(source)).arrayBuffer());
+
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('OCR timed out after 45s (first-time language data download may be slow — try again)')), 45000)
+      );
+      const candidates = await Promise.race([detectTextBlocks(buffer), timeout]);
+      reply.send({ candidates });
+    } catch (err) {
+      req.log.error(err);
+      reply.code(500).send({ error: 'detect_failed', message: err.message });
+    }
   });
 
   // Create a template from an uploaded image (multipart: file field "image",

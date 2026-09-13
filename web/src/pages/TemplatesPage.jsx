@@ -362,6 +362,9 @@ function CanvaImportModal({ categories, onClose, onImported }) {
         name: design.title,
         category_ids: categoryIds,
       });
+      if (template.elements_auto_detected > 0) {
+        alert(`Imported "${design.title}" — auto-detected ${template.elements_auto_detected} region${template.elements_auto_detected === 1 ? '' : 's'} from the design. Review them in the editor before using.`);
+      }
       onImported(template);
     } catch (err) {
       setError(`Failed to import "${design.title}": ${err.message}`);

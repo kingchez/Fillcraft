@@ -39,6 +39,10 @@ export default function EditorPage({ templateId, onBack }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [detectCandidates, setDetectCandidates] = useState(null); // null = not run yet
+  const [detectSelected, setDetectSelected] = useState(new Set());
+  const [detectBusy, setDetectBusy] = useState(false);
+  const [detectError, setDetectError] = useState('');
 
   const load = useCallback(async () => {
     const t = await api.getTemplate(templateId);
@@ -183,6 +187,50 @@ export default function EditorPage({ templateId, onBack }) {
     if (selectedId === target.id) setSelectedId(null);
   }
 
+  async function runDetectText() {
+    setDetectBusy(true);
+    setDetectError('');
+    try {
+      const { candidates } = await api.detectTextRegions(templateId);
+      setDetectCandidates(candidates);
+      // Pre-select everything by default — easier to uncheck a few false
+      // positives than to check many real ones individually.
+      setDetectSelected(new Set(candidates.map((_, i) => i)));
+    } catch (err) {
+      setDetectError(err.message);
+    } finally {
+      setDetectBusy(false);
+    }
+  }
+
+  function toggleDetectCandidate(i) {
+    setDetectSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  async function acceptDetectedRegions() {
+    const toCreate = detectCandidates.filter((_, i) => detectSelected.has(i));
+    for (const candidate of toCreate) {
+      const region = await api.createRegion(templateId, {
+        type: 'text',
+        x: candidate.x,
+        y: candidate.y,
+        width: candidate.width,
+        height: candidate.height,
+        max_characters: Math.max(20, Math.round(candidate.text.length * 1.3)),
+        original_style: DEFAULT_TEXT_STYLE,
+        current_style: DEFAULT_TEXT_STYLE,
+      });
+      setTemplate((t) => ({ ...t, template_regions: [...t.template_regions, region] }));
+    }
+    setDetectCandidates(null);
+    setDetectSelected(new Set());
+  }
+
   async function runPreview() {
     setPreviewBusy(true);
     setPreviewError('');
@@ -213,6 +261,9 @@ export default function EditorPage({ templateId, onBack }) {
           <button className={mode === 'draw-shape' ? 'active' : ''} onClick={() => setMode('draw-shape')}>+ Shape</button>
           <button className={mode === 'draw-icon' ? 'active' : ''} onClick={() => setMode('draw-icon')}>+ Icon</button>
         </div>
+        <button className="ghost-btn" onClick={runDetectText} disabled={detectBusy}>
+          {detectBusy ? '🔍 Scanning…' : '🔍 Auto-detect text'}
+        </button>
         <button className="primary-btn" onClick={() => setPreviewOpen(true)}>Preview autofill</button>
       </div>
 
@@ -260,9 +311,49 @@ export default function EditorPage({ templateId, onBack }) {
               style={{ left: draft.x, top: draft.y, width: draft.w, height: draft.h }}
             />
           )}
+
+          {detectCandidates && detectCandidates.map((c, i) => (
+            <div
+              key={i}
+              className={`detect-candidate ${detectSelected.has(i) ? 'selected' : 'rejected'}`}
+              style={{ left: c.x * scale, top: c.y * scale, width: c.width * scale, height: c.height * scale }}
+              onClick={() => toggleDetectCandidate(i)}
+              title={c.text}
+            >
+              <span className="detect-check">{detectSelected.has(i) ? '✓' : ''}</span>
+            </div>
+          ))}
         </div>
 
         <div className="editor-sidebar">
+          {detectCandidates && (
+            <div className="detect-review">
+              <div className="sidebar-title">
+                Detected text ({detectSelected.size}/{detectCandidates.length} selected)
+              </div>
+              {detectError && <div className="error-text">{detectError}</div>}
+              {detectCandidates.length === 0 ? (
+                <div className="hint-text">No text detected. This works best on clean, printed-style text — stylized or curved fonts are often missed.</div>
+              ) : (
+                <>
+                  <div className="hint-text">Click a box on the canvas (or the list below) to include/exclude it. Review before adding — OCR can misread stylized fonts.</div>
+                  <div className="detect-candidate-list">
+                    {detectCandidates.map((c, i) => (
+                      <label key={i} className="detect-candidate-row">
+                        <input type="checkbox" checked={detectSelected.has(i)} onChange={() => toggleDetectCandidate(i)} />
+                        <span className="detect-candidate-text">{c.text}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <button className="primary-btn full" onClick={acceptDetectedRegions} disabled={detectSelected.size === 0}>
+                    Add {detectSelected.size} region{detectSelected.size === 1 ? '' : 's'}
+                  </button>
+                </>
+              )}
+              <button className="ghost-btn full" onClick={() => setDetectCandidates(null)}>Cancel</button>
+            </div>
+          )}
+
           <div className="sidebar-title">Regions ({regions.length})</div>
           <div className="region-list">
             {regions.map((r) => (
