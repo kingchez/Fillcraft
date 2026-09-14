@@ -100,6 +100,30 @@ async function drawImageRegion(ctx, region, srcUrlOrDataUri) {
   ctx.restore();
 }
 
+// Samples the background color right at a text region's top-left corner
+// and paints over the whole box with it before new text is drawn — this is
+// what actually makes text "replaceable" rather than "overlaid": without
+// this, whatever was originally baked into the background image at that
+// spot (old text, texture, etc.) would still show through around/behind
+// the new text. Works cleanly for solid or simple-gradient backgrounds;
+// heavily textured/patterned backgrounds may show a faint flat patch where
+// the box was — an honest limitation of re-flattened source images rather
+// than a true live document.
+function eraseRegionBackground(ctx, region) {
+  const { x, y, width, height } = region;
+  try {
+    const sampleX = Math.min(Math.max(0, Math.round(x)), ctx.canvas.width - 1);
+    const sampleY = Math.min(Math.max(0, Math.round(y)), ctx.canvas.height - 1);
+    const pixel = ctx.getImageData(sampleX, sampleY, 1, 1).data;
+    ctx.save();
+    ctx.fillStyle = `rgba(${pixel[0]}, ${pixel[1]}, ${pixel[2]}, ${pixel[3] / 255})`;
+    ctx.fillRect(x, y, width, height);
+    ctx.restore();
+  } catch (err) {
+    console.error('[render] failed to sample/erase background for region, drawing text over it as-is:', err.message);
+  }
+}
+
 function drawTextRegion(ctx, region, rawText) {
   const style = region.current_style || region.original_style || {};
   const {
@@ -339,13 +363,26 @@ export async function renderTemplate(template, values = {}) {
 
   for (const region of regions) {
     if (region.type === 'image') {
-      const value = values[region.label];
+      // Explicit override wins; otherwise fall back to the region's own
+      // original image (so an untouched decorative photo stays intact
+      // instead of going blank). fit_mode 'cover' already fully opaquely
+      // covers the box, so there's no separate erase step needed here.
+      const value = values[region.label] ?? region.original_image_url;
       if (value) {
         await drawImageRegion(ctx, region, value);
       }
     } else if (region.type === 'text') {
-      const text = values[region.label];
+      const text = values[region.label] !== undefined && values[region.label] !== null
+        ? values[region.label]
+        : region.original_text;
       if (text !== undefined && text !== null) {
+        // Erase whatever's baked into the background at this exact spot
+        // before drawing — otherwise the original text (which is still
+        // physically part of the background image) can show through
+        // around/behind the new text. Sampled from the box's own top-left
+        // corner, which for typical text boxes (some internal padding, or
+        // vertically-centered text) is usually background, not glyph pixels.
+        eraseRegionBackground(ctx, region);
         drawTextRegion(ctx, region, text);
       }
     } else if (region.type === 'shape') {

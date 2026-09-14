@@ -14,7 +14,7 @@ function FieldLabel({ label, hasOriginal, onRevert, hint }) {
   );
 }
 
-export default function RegionInspector({ region, onChange, onReset, onDelete }) {
+export default function RegionInspector({ region, onChange, onReset, onDelete, onUploadDefaultImage }) {
   const [googleFonts, setGoogleFonts] = useState([]);
   const [customFonts, setCustomFonts] = useState([]);
   const [uploadingFont, setUploadingFont] = useState(false);
@@ -109,6 +109,15 @@ export default function RegionInspector({ region, onChange, onReset, onDelete })
               type="number"
               value={region.max_characters ?? ''}
               onChange={(e) => onChange({ max_characters: e.target.value ? Number(e.target.value) : null })}
+            />
+          </div>
+
+          <div className="field">
+            <label>Default text <span className="field-hint">(rendered when autofill doesn't provide this field — leave blank to render nothing by default)</span></label>
+            <textarea
+              value={region.original_text || ''}
+              onChange={(e) => onChange({ original_text: e.target.value || null })}
+              placeholder="e.g. the original headline from the design"
             />
           </div>
 
@@ -240,6 +249,21 @@ export default function RegionInspector({ region, onChange, onReset, onDelete })
 
       {region.type === 'image' && (
         <>
+          <div className="field">
+            <label>Default image <span className="field-hint">(shown when autofill doesn't provide this field)</span></label>
+            {region.original_image_url ? (
+              <div className="default-image-preview">
+                <img src={region.original_image_url} alt="default" />
+              </div>
+            ) : (
+              <div className="hint-text">No default set — renders blank until autofill supplies one, or set one here.</div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => e.target.files[0] && onUploadDefaultImage(e.target.files[0])}
+            />
+          </div>
           <div className="field">
             <FieldLabel label="Fit mode" {...propField('fit_mode')} />
             <select value={region.fit_mode ?? 'cover'} onChange={(e) => onChange({ fit_mode: e.target.value })}>

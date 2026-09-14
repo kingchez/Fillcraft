@@ -208,6 +208,29 @@ export default async function templatesRoutes(app) {
     reply.code(204).send();
   });
 
+  // Sets the "default image" for an image region — what renders when
+  // autofill doesn't override this field. Multipart: file field "image".
+  app.post('/:id/regions/:regionId/default-image', async (req, reply) => {
+    if (!req.isMultipart()) {
+      return reply.code(400).send({ error: 'expected multipart/form-data with an "image" file' });
+    }
+    let fileBuffer = null;
+    let filename = null;
+    let mimetype = null;
+    for await (const part of req.parts()) {
+      if (part.type === 'file') {
+        fileBuffer = await part.toBuffer();
+        filename = part.filename;
+        mimetype = part.mimetype;
+      }
+    }
+    if (!fileBuffer) return reply.code(400).send({ error: 'image file is required' });
+
+    const asset = await storeAsset(fileBuffer, filename || 'default-image.png', mimetype || 'image/png');
+    const updated = await updateRegion(req.params.regionId, { original_image_url: asset.url });
+    reply.send(updated);
+  });
+
   // Whole-style reset (text: current_style <- original_style;
   // image/shape/icon: their flat properties <- original_properties).
   app.post('/:id/regions/:regionId/reset-style', async (req, reply) => {

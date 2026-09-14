@@ -8,7 +8,7 @@ import { listDesigns, getDesign, createExportJob, waitForExport } from '../servi
 import { getImageDimensions } from '../render/canvasRenderer.js';
 import { storeAsset } from '../services/storage.js';
 import { createTemplate, createRegion, getTemplate } from '../services/templateStore.js';
-import { parsePptx } from '../services/pptxParser.js';
+import { parsePptx, extractMedia } from '../services/pptxParser.js';
 
 function canvaConfigured() {
   return !!(process.env.CANVA_CLIENT_ID && process.env.CANVA_CLIENT_SECRET && process.env.CANVA_REDIRECT_URI);
@@ -120,7 +120,7 @@ export default async function canvaRoutes(app) {
       let elementsCreated = 0;
       try {
         const pptxBuffer = await downloadExport(designId, 'pptx');
-        const { elements } = await parsePptx(pptxBuffer, { targetWidthPx: width, targetHeightPx: height });
+        const { elements, zip } = await parsePptx(pptxBuffer, { targetWidthPx: width, targetHeightPx: height });
 
         for (const el of elements) {
           if (el.type === 'text') {
@@ -139,15 +139,31 @@ export default async function canvaRoutes(app) {
               // Defaults to the real original text's exact length, per how
               // this design was actually built — not an estimate.
               max_characters: el.text.length,
+              // The actual original text — rendered as the default when
+              // autofill doesn't override this field, instead of going blank.
+              original_text: el.text,
               original_style: style,
               current_style: style,
             });
             elementsCreated++;
           } else if (el.type === 'image') {
+            // Extract the real embedded photo from the PPTX and store it as
+            // this region's default image — so an unedited photo placeholder
+            // renders the original design's actual image, not a blank box.
+            let originalImageUrl = null;
+            try {
+              const mediaBuffer = await extractMedia(zip, el.mediaPath);
+              const ext = el.mediaPath.split('.').pop() || 'png';
+              const asset = await storeAsset(mediaBuffer, `${designId}-${el.mediaPath.split('/').pop()}`, `image/${ext}`);
+              originalImageUrl = asset.url;
+            } catch (mediaErr) {
+              req.log.warn(`Could not extract embedded image ${el.mediaPath}: ${mediaErr.message}`);
+            }
             await createRegion(template.id, {
               type: 'image',
               x: el.x, y: el.y, width: el.width, height: el.height,
               fit_mode: 'cover',
+              original_image_url: originalImageUrl,
             });
             elementsCreated++;
           }

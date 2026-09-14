@@ -272,6 +272,8 @@ const REGION_DEFAULTS = {
   icon_name: null,
   icon_color: null,
   original_properties: null,
+  original_text: null,
+  original_image_url: null,
 };
 
 export async function createRegion(template_id, region) {
@@ -288,9 +290,9 @@ export async function createRegion(template_id, region) {
   localDb
     .prepare(
       `INSERT INTO fillcraft_template_regions
-        (id, template_id, type, label, x, y, width, height, z_index, max_characters, original_style, current_style, auto_shrink_to_fit, fit_mode, corner_radius, opacity, rotation, border_width, border_color, filter, shape_type, fill_color, stroke_color, stroke_width, sides, icon_name, icon_color, original_properties, created_at, updated_at)
+        (id, template_id, type, label, x, y, width, height, z_index, max_characters, original_style, current_style, auto_shrink_to_fit, fit_mode, corner_radius, opacity, rotation, border_width, border_color, filter, shape_type, fill_color, stroke_color, stroke_width, sides, icon_name, icon_color, original_properties, original_text, original_image_url, created_at, updated_at)
        VALUES
-        (@id, @template_id, @type, @label, @x, @y, @width, @height, @z_index, @max_characters, @original_style, @current_style, @auto_shrink_to_fit, @fit_mode, @corner_radius, @opacity, @rotation, @border_width, @border_color, @filter, @shape_type, @fill_color, @stroke_color, @stroke_width, @sides, @icon_name, @icon_color, @original_properties, @created_at, @updated_at)`
+        (@id, @template_id, @type, @label, @x, @y, @width, @height, @z_index, @max_characters, @original_style, @current_style, @auto_shrink_to_fit, @fit_mode, @corner_radius, @opacity, @rotation, @border_width, @border_color, @filter, @shape_type, @fill_color, @stroke_color, @stroke_width, @sides, @icon_name, @icon_color, @original_properties, @original_text, @original_image_url, @created_at, @updated_at)`
     )
     .run(local);
 
@@ -315,9 +317,9 @@ export async function updateRegion(id, patch) {
   localDb
     .prepare(
       `INSERT OR REPLACE INTO fillcraft_template_regions
-        (id, template_id, type, label, x, y, width, height, z_index, max_characters, original_style, current_style, auto_shrink_to_fit, fit_mode, corner_radius, opacity, rotation, border_width, border_color, filter, shape_type, fill_color, stroke_color, stroke_width, sides, icon_name, icon_color, original_properties, created_at, updated_at)
+        (id, template_id, type, label, x, y, width, height, z_index, max_characters, original_style, current_style, auto_shrink_to_fit, fit_mode, corner_radius, opacity, rotation, border_width, border_color, filter, shape_type, fill_color, stroke_color, stroke_width, sides, icon_name, icon_color, original_properties, original_text, original_image_url, created_at, updated_at)
        VALUES
-        (@id, @template_id, @type, @label, @x, @y, @width, @height, @z_index, @max_characters, @original_style, @current_style, @auto_shrink_to_fit, @fit_mode, @corner_radius, @opacity, @rotation, @border_width, @border_color, @filter, @shape_type, @fill_color, @stroke_color, @stroke_width, @sides, @icon_name, @icon_color, @original_properties, @created_at, @updated_at)`
+        (@id, @template_id, @type, @label, @x, @y, @width, @height, @z_index, @max_characters, @original_style, @current_style, @auto_shrink_to_fit, @fit_mode, @corner_radius, @opacity, @rotation, @border_width, @border_color, @filter, @shape_type, @fill_color, @stroke_color, @stroke_width, @sides, @icon_name, @icon_color, @original_properties, @original_text, @original_image_url, @created_at, @updated_at)`
     )
     .run(local);
 

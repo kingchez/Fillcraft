@@ -184,6 +184,12 @@ body {
   margin-bottom: 12px;
 }
 .icon-preview img { width: 32px; height: 32px; }
+.default-image-preview {
+  width: 100%; max-height: 120px; border-radius: 8px; overflow: hidden;
+  background: var(--panel-2); border: 1px solid var(--border); margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.default-image-preview img { max-width: 100%; max-height: 120px; object-fit: contain; }
 
 .field input[type=text], .field input[type=number], .field textarea, .field select {
   width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);

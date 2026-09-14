@@ -62,6 +62,8 @@ export function ensureLocalSchema() {
       icon_name TEXT,
       icon_color TEXT,
       original_properties TEXT,
+      original_text TEXT,
+      original_image_url TEXT,
       created_at TEXT,
       updated_at TEXT
     );

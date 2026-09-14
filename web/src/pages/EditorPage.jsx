@@ -377,6 +377,13 @@ export default function EditorPage({ templateId, onBack }) {
               onChange={handleUpdateRegion}
               onReset={handleResetStyle}
               onDelete={() => handleDeleteRegion()}
+              onUploadDefaultImage={async (file) => {
+                const updated = await api.uploadDefaultImage(templateId, selected.id, file);
+                setTemplate((t) => ({
+                  ...t,
+                  template_regions: t.template_regions.map((r) => (r.id === updated.id ? updated : r)),
+                }));
+              }}
             />
           )}
         </div>

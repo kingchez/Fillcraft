@@ -93,6 +93,11 @@ export const api = {
     }).then(handle),
   deleteRegion: (templateId, regionId) =>
     fetch(`${BASE}/templates/${templateId}/regions/${regionId}`, { method: 'DELETE' }).then(handle),
+  uploadDefaultImage: (templateId, regionId, file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return fetch(`${BASE}/templates/${templateId}/regions/${regionId}/default-image`, { method: 'POST', body: fd }).then(handle);
+  },
   resetRegionStyle: (templateId, regionId) =>
     fetch(`${BASE}/templates/${templateId}/regions/${regionId}/reset-style`, { method: 'POST' }).then(handle),
 
