@@ -98,9 +98,6 @@ export const api = {
     fd.append('image', file);
     return fetch(`${BASE}/templates/${templateId}/regions/${regionId}/default-image`, { method: 'POST', body: fd }).then(handle);
   },
-  resetRegionStyle: (templateId, regionId) =>
-    fetch(`${BASE}/templates/${templateId}/regions/${regionId}/reset-style`, { method: 'POST' }).then(handle),
-
   // Autofill preview
   autofillPreview: (templateId, values) =>
     fetch(`${BASE}/templates/${templateId}/autofill`, {

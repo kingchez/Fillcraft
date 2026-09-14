@@ -8,7 +8,7 @@ import { listDesigns, getDesign, createExportJob, waitForExport } from '../servi
 import { getImageDimensions } from '../render/canvasRenderer.js';
 import { storeAsset } from '../services/storage.js';
 import { createTemplate, createRegion, getTemplate } from '../services/templateStore.js';
-import { parsePptx, extractMedia } from '../services/pptxParser.js';
+import * as canvaProvider from '../services/importProviders/canva.js';
 
 function canvaConfigured() {
   return !!(process.env.CANVA_CLIENT_ID && process.env.CANVA_CLIENT_SECRET && process.env.CANVA_REDIRECT_URI);
@@ -86,14 +86,13 @@ export default async function canvaRoutes(app) {
     }
   });
 
-  // Pulls a Canva design in as a new Fillcraft template. Two things happen
-  // in parallel: a flattened PNG export (used as the visual background,
-  // same as before) and a PPTX export (structured XML — real text runs with
-  // font/size/color, real image positions) which we parse to auto-create
-  // regions matching the design's actual elements, instead of requiring
-  // manual box-drawing. If PPTX parsing fails or finds nothing usable, the
-  // import still succeeds as a plain flattened template (old behavior) —
-  // this is a strict enhancement, never a new way to fail.
+  // Pulls a Canva design in as a new Fillcraft template. A flattened PNG
+  // export is always stored as the visual background (so imports never
+  // fail outright even if structural extraction finds nothing). In
+  // parallel, the Canva import provider extracts real elements — SVG when
+  // Canva offers it for this design type (best fidelity: exact shapes,
+  // fonts, colors, positions), PPTX otherwise — and turns each into a
+  // matching, autofill-ready region instead of requiring manual box-drawing.
   app.post('/import/:designId', async (req, reply) => {
     if (!canvaConfigured()) {
       return reply.code(501).send({ error: 'canva_not_configured' });
@@ -118,9 +117,13 @@ export default async function canvaRoutes(app) {
       });
 
       let elementsCreated = 0;
+      let extractionSource = null;
       try {
-        const pptxBuffer = await downloadExport(designId, 'pptx');
-        const { elements, zip } = await parsePptx(pptxBuffer, { targetWidthPx: width, targetHeightPx: height });
+        const { source, elements, resolveImage } = await canvaProvider.extractElements(designId, {
+          targetWidthPx: width,
+          targetHeightPx: height,
+        });
+        extractionSource = source;
 
         for (const el of elements) {
           if (el.type === 'text') {
@@ -142,22 +145,21 @@ export default async function canvaRoutes(app) {
               // The actual original text — rendered as the default when
               // autofill doesn't override this field, instead of going blank.
               original_text: el.text,
-              original_style: style,
               current_style: style,
             });
             elementsCreated++;
           } else if (el.type === 'image') {
-            // Extract the real embedded photo from the PPTX and store it as
-            // this region's default image — so an unedited photo placeholder
-            // renders the original design's actual image, not a blank box.
+            // Extract the real embedded photo and store it as this region's
+            // default image — so an unedited photo placeholder renders the
+            // original design's actual image, not a blank box.
             let originalImageUrl = null;
             try {
-              const mediaBuffer = await extractMedia(zip, el.mediaPath);
-              const ext = el.mediaPath.split('.').pop() || 'png';
-              const asset = await storeAsset(mediaBuffer, `${designId}-${el.mediaPath.split('/').pop()}`, `image/${ext}`);
+              const { buffer, mime } = await resolveImage(el);
+              const ext = mime.split('/')[1] || 'png';
+              const asset = await storeAsset(buffer, `${designId}-${elementsCreated}.${ext}`, mime);
               originalImageUrl = asset.url;
             } catch (mediaErr) {
-              req.log.warn(`Could not extract embedded image ${el.mediaPath}: ${mediaErr.message}`);
+              req.log.warn(`Could not resolve embedded image: ${mediaErr.message}`);
             }
             await createRegion(template.id, {
               type: 'image',
@@ -166,16 +168,29 @@ export default async function canvaRoutes(app) {
               original_image_url: originalImageUrl,
             });
             elementsCreated++;
+          } else if (el.type === 'shape') {
+            // Only the SVG path produces real shape elements (rect/ellipse)
+            // — PPTX parsing doesn't attempt shape geometry.
+            await createRegion(template.id, {
+              type: 'shape',
+              x: el.x, y: el.y, width: el.width, height: el.height,
+              shape_type: el.shape_type,
+              corner_radius: el.corner_radius || 0,
+              fill_color: el.fill_color,
+              stroke_color: el.stroke_color,
+              stroke_width: el.stroke_width || 0,
+            });
+            elementsCreated++;
           }
         }
-      } catch (pptxErr) {
+      } catch (extractErr) {
         // Non-fatal — the template above was already created successfully
-        // with just the flattened background, same as the old behavior.
-        req.log.warn(`PPTX structural parse failed, falling back to flatten-only import: ${pptxErr.message}`);
+        // with just the flattened background.
+        req.log.warn(`Structural extraction failed, falling back to flatten-only import: ${extractErr.message}`);
       }
 
       const finalTemplate = elementsCreated > 0 ? await getTemplate(template.id) : template;
-      reply.code(201).send({ ...finalTemplate, elements_auto_detected: elementsCreated });
+      reply.code(201).send({ ...finalTemplate, elements_auto_detected: elementsCreated, extraction_source: extractionSource });
     } catch (err) {
       if (err.message === 'not_connected') {
         return reply.code(409).send({ error: 'not_connected', message: 'Connect Canva first via /api/canva/connect.' });

@@ -131,20 +131,21 @@ export default async function templatesRoutes(app) {
     let payload;
 
     if (body.type === 'text') {
-      const style = body.original_style || {};
       payload = {
         type: 'text',
         label,
         x: body.x, y: body.y, width: body.width, height: body.height,
         z_index: body.z_index ?? 0,
         max_characters: body.max_characters ?? null,
-        original_style: style,
-        current_style: body.current_style || style,
+        current_style: body.current_style || {},
         original_text: body.original_text ?? null,
         auto_shrink_to_fit: body.auto_shrink_to_fit ?? true,
       };
     } else if (body.type === 'image') {
-      const props = {
+      payload = {
+        type: 'image', label,
+        x: body.x, y: body.y, width: body.width, height: body.height,
+        z_index: body.z_index ?? 0,
         fit_mode: body.fit_mode ?? 'cover',
         corner_radius: body.corner_radius ?? 0,
         opacity: body.opacity ?? 1,
@@ -152,17 +153,13 @@ export default async function templatesRoutes(app) {
         border_width: body.border_width ?? 0,
         border_color: body.border_color ?? null,
         filter: body.filter ?? null,
-      };
-      payload = {
-        type: 'image', label,
-        x: body.x, y: body.y, width: body.width, height: body.height,
-        z_index: body.z_index ?? 0,
-        ...props,
-        original_properties: props,
         original_image_url: body.original_image_url ?? null,
       };
     } else if (body.type === 'shape') {
-      const props = {
+      payload = {
+        type: 'shape', label,
+        x: body.x, y: body.y, width: body.width, height: body.height,
+        z_index: body.z_index ?? 0,
         shape_type: body.shape_type ?? 'rectangle',
         fill_color: body.fill_color ?? '#D9A441',
         stroke_color: body.stroke_color ?? null,
@@ -172,27 +169,16 @@ export default async function templatesRoutes(app) {
         rotation: body.rotation ?? 0,
         sides: body.sides ?? 6,
       };
-      payload = {
-        type: 'shape', label,
-        x: body.x, y: body.y, width: body.width, height: body.height,
-        z_index: body.z_index ?? 0,
-        ...props,
-        original_properties: props,
-      };
     } else {
       // icon
-      const props = {
-        icon_name: body.icon_name ?? 'mdi:star',
-        icon_color: body.icon_color ?? '#D9A441',
-        opacity: body.opacity ?? 1,
-        rotation: body.rotation ?? 0,
-      };
       payload = {
         type: 'icon', label,
         x: body.x, y: body.y, width: body.width, height: body.height,
         z_index: body.z_index ?? 0,
-        ...props,
-        original_properties: props,
+        icon_name: body.icon_name ?? 'mdi:star',
+        icon_color: body.icon_color ?? '#D9A441',
+        opacity: body.opacity ?? 1,
+        rotation: body.rotation ?? 0,
       };
     }
 
@@ -230,21 +216,6 @@ export default async function templatesRoutes(app) {
 
     const asset = await storeAsset(fileBuffer, filename || 'default-image.png', mimetype || 'image/png');
     const updated = await updateRegion(req.params.regionId, { original_image_url: asset.url });
-    reply.send(updated);
-  });
-
-  // Whole-style reset (text: current_style <- original_style;
-  // image/shape/icon: their flat properties <- original_properties).
-  app.post('/:id/regions/:regionId/reset-style', async (req, reply) => {
-    const template = await getTemplate(req.params.id);
-    const region = (template?.template_regions || []).find((r) => r.id === req.params.regionId);
-    if (!region) return reply.code(404).send({ error: 'not_found' });
-
-    const patch = region.type === 'text'
-      ? { current_style: region.original_style }
-      : { ...region.original_properties };
-
-    const updated = await updateRegion(region.id, patch);
     reply.send(updated);
   });
 }

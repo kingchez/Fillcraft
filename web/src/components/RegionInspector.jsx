@@ -14,7 +14,7 @@ function FieldLabel({ label, hasOriginal, onRevert, hint }) {
   );
 }
 
-export default function RegionInspector({ region, onChange, onReset, onDelete, onUploadDefaultImage }) {
+export default function RegionInspector({ region, onChange, onDelete, onUploadDefaultImage }) {
   const [googleFonts, setGoogleFonts] = useState([]);
   const [customFonts, setCustomFonts] = useState([]);
   const [uploadingFont, setUploadingFont] = useState(false);
@@ -27,8 +27,6 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
   }, []);
 
   const style = region.current_style || {};
-  const originalStyle = region.original_style || {};
-  const originalProps = region.original_properties || {};
 
   // Recompute the estimated character capacity whenever anything that
   // affects it changes (box size, font, size, weight, line height).
@@ -54,18 +52,6 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
 
   function updateStyle(patch) {
     onChange({ current_style: { ...style, ...patch } });
-  }
-
-  // "Original" here always means: the value this property had the moment
-  // the region was created/first saved — not an auto-detected value from
-  // the source image. Pick it once, and you can always come back to it.
-  function styleField(key) {
-    const hasOriginal = originalStyle[key] !== undefined && originalStyle[key] !== null && originalStyle[key] !== style[key];
-    return { hasOriginal, onRevert: () => updateStyle({ [key]: originalStyle[key] }) };
-  }
-  function propField(key) {
-    const hasOriginal = originalProps[key] !== undefined && originalProps[key] !== null && originalProps[key] !== region[key];
-    return { hasOriginal, onRevert: () => onChange({ [key]: originalProps[key] }) };
   }
 
   async function handleFontUpload(e) {
@@ -150,7 +136,7 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
           </div>
 
           <div className="field">
-            <FieldLabel label="Font family" {...styleField('font_family')} />
+            <FieldLabel label="Font family" />
             <select value={style.font_family || ''} onChange={(e) => updateStyle({ font_family: e.target.value })}>
               <optgroup label="Custom fonts">
                 {customFonts.map((f) => <option key={f.id} value={f.family_name}>{f.family_name}</option>)}
@@ -167,25 +153,25 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
 
           <div className="field row2">
             <div>
-              <FieldLabel label="Size" {...styleField('font_size')} />
+              <FieldLabel label="Size" />
               <input type="number" value={style.font_size ?? 24} onChange={(e) => updateStyle({ font_size: Number(e.target.value) })} />
             </div>
             <div>
-              <FieldLabel label="Color" {...styleField('color')} />
+              <FieldLabel label="Color" />
               <input type="color" value={style.color ?? '#111111'} onChange={(e) => updateStyle({ color: e.target.value })} />
             </div>
           </div>
 
           <div className="field row2">
             <div>
-              <FieldLabel label="Weight" {...styleField('font_weight')} />
+              <FieldLabel label="Weight" />
               <select value={style.font_weight ?? 'normal'} onChange={(e) => updateStyle({ font_weight: e.target.value })}>
                 <option value="normal">Normal</option>
                 <option value="bold">Bold</option>
               </select>
             </div>
             <div>
-              <FieldLabel label="Style" {...styleField('italic')} />
+              <FieldLabel label="Style" />
               <select value={style.italic ? 'italic' : 'normal'} onChange={(e) => updateStyle({ italic: e.target.value === 'italic' })}>
                 <option value="normal">Normal</option>
                 <option value="italic">Italic</option>
@@ -194,7 +180,7 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
           </div>
 
           <div className="field">
-            <FieldLabel label="Alignment" {...styleField('align')} />
+            <FieldLabel label="Alignment" />
             <select value={style.align ?? 'left'} onChange={(e) => updateStyle({ align: e.target.value })}>
               <option value="left">Left</option>
               <option value="center">Center</option>
@@ -204,17 +190,17 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
 
           <div className="field row2">
             <div>
-              <FieldLabel label="Line height" {...styleField('line_height')} />
+              <FieldLabel label="Line height" />
               <input type="number" step="0.1" value={style.line_height ?? 1.3} onChange={(e) => updateStyle({ line_height: Number(e.target.value) })} />
             </div>
             <div>
-              <FieldLabel label="Letter spacing" {...styleField('letter_spacing')} />
+              <FieldLabel label="Letter spacing" />
               <input type="number" step="0.5" value={style.letter_spacing ?? 0} onChange={(e) => updateStyle({ letter_spacing: Number(e.target.value) })} />
             </div>
           </div>
 
           <div className="field">
-            <FieldLabel label="Text transform" {...styleField('text_transform')} />
+            <FieldLabel label="Text transform" />
             <select value={style.text_transform ?? 'none'} onChange={(e) => updateStyle({ text_transform: e.target.value })}>
               <option value="none">None</option>
               <option value="uppercase">UPPERCASE</option>
@@ -230,11 +216,11 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
 
           <div className="field row2">
             <div>
-              <FieldLabel label="Opacity" {...styleField('opacity')} />
+              <FieldLabel label="Opacity" />
               <input type="number" step="0.1" min="0" max="1" value={style.opacity ?? 1} onChange={(e) => updateStyle({ opacity: Number(e.target.value) })} />
             </div>
             <div>
-              <FieldLabel label="Rotation°" {...styleField('rotation')} />
+              <FieldLabel label="Rotation°" />
               <input type="number" value={style.rotation ?? 0} onChange={(e) => updateStyle({ rotation: Number(e.target.value) })} />
             </div>
           </div>
@@ -243,7 +229,6 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
             <label><input type="checkbox" checked={region.auto_shrink_to_fit !== false} onChange={(e) => onChange({ auto_shrink_to_fit: e.target.checked })} /> Auto-shrink to fit box</label>
           </div>
 
-          <button className="ghost-btn full" onClick={onReset}>↺ Reset all properties to original</button>
         </>
       )}
 
@@ -265,7 +250,7 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
             />
           </div>
           <div className="field">
-            <FieldLabel label="Fit mode" {...propField('fit_mode')} />
+            <FieldLabel label="Fit mode" />
             <select value={region.fit_mode ?? 'cover'} onChange={(e) => onChange({ fit_mode: e.target.value })}>
               <option value="cover">Cover (crop to fill)</option>
               <option value="contain">Contain (fit inside, no crop)</option>
@@ -273,7 +258,7 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
             </select>
           </div>
           <div className="field">
-            <FieldLabel label="Filter" {...propField('filter')} />
+            <FieldLabel label="Filter" />
             <select value={region.filter ?? ''} onChange={(e) => onChange({ filter: e.target.value || null })}>
               <option value="">None</option>
               <option value="grayscale">Grayscale</option>
@@ -282,36 +267,35 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
           </div>
           <div className="field row2">
             <div>
-              <FieldLabel label="Corner radius" {...propField('corner_radius')} />
+              <FieldLabel label="Corner radius" />
               <input type="number" value={region.corner_radius ?? 0} onChange={(e) => onChange({ corner_radius: Number(e.target.value) })} />
             </div>
             <div>
-              <FieldLabel label="Rotation°" {...propField('rotation')} />
+              <FieldLabel label="Rotation°" />
               <input type="number" value={region.rotation ?? 0} onChange={(e) => onChange({ rotation: Number(e.target.value) })} />
             </div>
           </div>
           <div className="field row2">
             <div>
-              <FieldLabel label="Border width" {...propField('border_width')} />
+              <FieldLabel label="Border width" />
               <input type="number" value={region.border_width ?? 0} onChange={(e) => onChange({ border_width: Number(e.target.value) })} />
             </div>
             <div>
-              <FieldLabel label="Border color" {...propField('border_color')} />
+              <FieldLabel label="Border color" />
               <input type="color" value={region.border_color ?? '#000000'} onChange={(e) => onChange({ border_color: e.target.value })} />
             </div>
           </div>
           <div className="field">
-            <FieldLabel label="Opacity" {...propField('opacity')} />
+            <FieldLabel label="Opacity" />
             <input type="number" step="0.1" min="0" max="1" value={region.opacity ?? 1} onChange={(e) => onChange({ opacity: Number(e.target.value) })} />
           </div>
-          <button className="ghost-btn full" onClick={onReset}>↺ Reset all properties to original</button>
         </>
       )}
 
       {region.type === 'shape' && (
         <>
           <div className="field">
-            <FieldLabel label="Shape" {...propField('shape_type')} />
+            <FieldLabel label="Shape" />
             <select value={region.shape_type ?? 'rectangle'} onChange={(e) => onChange({ shape_type: e.target.value })}>
               <option value="rectangle">Rectangle</option>
               <option value="circle">Circle / ellipse</option>
@@ -322,48 +306,47 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
           </div>
           {region.shape_type === 'polygon' && (
             <div className="field">
-              <FieldLabel label="Sides" {...propField('sides')} />
+              <FieldLabel label="Sides" />
               <input type="number" min="3" value={region.sides ?? 6} onChange={(e) => onChange({ sides: Number(e.target.value) })} />
             </div>
           )}
           <div className="field row2">
             <div>
-              <FieldLabel label="Fill color" {...propField('fill_color')} />
+              <FieldLabel label="Fill color" />
               <input type="color" value={region.fill_color ?? '#D9A441'} onChange={(e) => onChange({ fill_color: e.target.value })} />
             </div>
             <div>
-              <FieldLabel label="Corner radius" {...propField('corner_radius')} />
+              <FieldLabel label="Corner radius" />
               <input type="number" value={region.corner_radius ?? 0} onChange={(e) => onChange({ corner_radius: Number(e.target.value) })} disabled={region.shape_type !== 'rectangle'} />
             </div>
           </div>
           <div className="field row2">
             <div>
-              <FieldLabel label="Stroke color" {...propField('stroke_color')} />
+              <FieldLabel label="Stroke color" />
               <input type="color" value={region.stroke_color ?? '#000000'} onChange={(e) => onChange({ stroke_color: e.target.value })} />
             </div>
             <div>
-              <FieldLabel label="Stroke width" {...propField('stroke_width')} />
+              <FieldLabel label="Stroke width" />
               <input type="number" value={region.stroke_width ?? 0} onChange={(e) => onChange({ stroke_width: Number(e.target.value) })} />
             </div>
           </div>
           <div className="field row2">
             <div>
-              <FieldLabel label="Opacity" {...propField('opacity')} />
+              <FieldLabel label="Opacity" />
               <input type="number" step="0.1" min="0" max="1" value={region.opacity ?? 1} onChange={(e) => onChange({ opacity: Number(e.target.value) })} />
             </div>
             <div>
-              <FieldLabel label="Rotation°" {...propField('rotation')} />
+              <FieldLabel label="Rotation°" />
               <input type="number" value={region.rotation ?? 0} onChange={(e) => onChange({ rotation: Number(e.target.value) })} />
             </div>
           </div>
-          <button className="ghost-btn full" onClick={onReset}>↺ Reset all properties to original</button>
         </>
       )}
 
       {region.type === 'icon' && (
         <>
           <div className="field">
-            <FieldLabel label="Icon" hint="format: prefix:name — browse icon-sets.iconify.design" {...propField('icon_name')} />
+            <FieldLabel label="Icon" hint="format: prefix:name — browse icon-sets.iconify.design" />
             <input type="text" value={region.icon_name ?? ''} onChange={(e) => onChange({ icon_name: e.target.value })} placeholder="mdi:heart" />
           </div>
           {region.icon_name && (
@@ -376,20 +359,19 @@ export default function RegionInspector({ region, onChange, onReset, onDelete, o
             </div>
           )}
           <div className="field">
-            <FieldLabel label="Color" {...propField('icon_color')} />
+            <FieldLabel label="Color" />
             <input type="color" value={region.icon_color ?? '#D9A441'} onChange={(e) => onChange({ icon_color: e.target.value })} />
           </div>
           <div className="field row2">
             <div>
-              <FieldLabel label="Opacity" {...propField('opacity')} />
+              <FieldLabel label="Opacity" />
               <input type="number" step="0.1" min="0" max="1" value={region.opacity ?? 1} onChange={(e) => onChange({ opacity: Number(e.target.value) })} />
             </div>
             <div>
-              <FieldLabel label="Rotation°" {...propField('rotation')} />
+              <FieldLabel label="Rotation°" />
               <input type="number" value={region.rotation ?? 0} onChange={(e) => onChange({ rotation: Number(e.target.value) })} />
             </div>
           </div>
-          <button className="ghost-btn full" onClick={onReset}>↺ Reset all properties to original</button>
         </>
       )}
 

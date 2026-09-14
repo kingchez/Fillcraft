@@ -54,7 +54,7 @@ export async function ensureFontsForTemplate(template) {
   const families = new Set();
   for (const region of template.template_regions || []) {
     if (region.type !== 'text') continue;
-    const style = region.current_style || region.original_style;
+    const style = region.current_style;
     if (style?.font_family) families.add(style.font_family);
   }
   await Promise.all([...families].map(ensureGoogleFontRegistered));

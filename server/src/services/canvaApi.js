@@ -44,13 +44,24 @@ export async function getDesign(designId) {
   return data.design;
 }
 
+// Checks which export formats Canva actually supports for this design —
+// SVG isn't guaranteed for every design type, so callers check this before
+// relying on it and fall back to PPTX when it's absent.
+export async function getExportFormats(designId) {
+  const data = await canvaFetch(`/designs/${designId}/export-formats`);
+  return Object.keys(data.formats || {});
+}
+
 // as_single_image flattens a multi-page Canva design into one PNG, matching
 // Fillcraft's template model (one base image + regions drawn on top of it).
-// Pass format: 'pptx' to get a structured PowerPoint export instead, used by
-// the smart-import pipeline to recover real element positions/fonts/colors.
+// Pass format: 'svg' for a real structured vector export (preferred — see
+// svgParser.js), or 'pptx' as the fallback when SVG isn't available for this
+// design type.
 export async function createExportJob(designId, format = 'png') {
   const formatSpec =
-    format === 'pptx'
+    format === 'svg'
+      ? { type: 'svg' }
+      : format === 'pptx'
       ? { type: 'pptx' }
       : { type: 'png', as_single_image: true, lossless: true };
   const data = await canvaFetch('/exports', {

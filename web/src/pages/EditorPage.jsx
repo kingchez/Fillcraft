@@ -144,7 +144,6 @@ export default function EditorPage({ templateId, onBack }) {
           width: toNatural(box.w), height: toNatural(box.h),
         };
         if (type === 'text') {
-          payload.original_style = DEFAULT_TEXT_STYLE;
           payload.current_style = DEFAULT_TEXT_STYLE;
           payload.max_characters = 200;
         } else if (type === 'image') {
@@ -195,15 +194,6 @@ export default function EditorPage({ templateId, onBack }) {
     }));
   }
 
-  async function handleResetStyle() {
-    if (!selected) return;
-    const updated = await api.resetRegionStyle(templateId, selected.id);
-    setTemplate((t) => ({
-      ...t,
-      template_regions: t.template_regions.map((r) => (r.id === updated.id ? updated : r)),
-    }));
-  }
-
   async function handleDeleteRegion(region) {
     const target = region || selected;
     if (!target) return;
@@ -248,7 +238,6 @@ export default function EditorPage({ templateId, onBack }) {
         width: candidate.width,
         height: candidate.height,
         max_characters: Math.max(20, Math.round(candidate.text.length * 1.3)),
-        original_style: DEFAULT_TEXT_STYLE,
         current_style: DEFAULT_TEXT_STYLE,
       });
       setTemplate((t) => ({ ...t, template_regions: [...t.template_regions, region] }));
@@ -406,7 +395,6 @@ export default function EditorPage({ templateId, onBack }) {
             <RegionInspector
               region={selected}
               onChange={handleUpdateRegion}
-              onReset={handleResetStyle}
               onDelete={() => handleDeleteRegion()}
               onUploadDefaultImage={async (file) => {
                 const updated = await api.uploadDefaultImage(templateId, selected.id, file);

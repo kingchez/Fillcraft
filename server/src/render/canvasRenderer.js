@@ -125,7 +125,7 @@ function eraseRegionBackground(ctx, region) {
 }
 
 function drawTextRegion(ctx, region, rawText) {
-  const style = region.current_style || region.original_style || {};
+  const style = region.current_style || {};
   const {
     font_family = 'sans-serif',
     font_size = 24,
