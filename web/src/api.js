@@ -70,6 +70,13 @@ export const api = {
   getTemplate: (id) => fetch(`${BASE}/templates/${id}`).then(handle),
   createTemplate: (formData) =>
     fetch(`${BASE}/templates`, { method: 'POST', body: formData }).then(handle),
+  // Genuine blank-canvas creation — no image upload, no Canva involved.
+  createBlankTemplate: (body) =>
+    fetch(`${BASE}/templates/blank`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(handle),
   updateTemplate: (id, patch) =>
     fetch(`${BASE}/templates/${id}`, {
       method: 'PATCH',

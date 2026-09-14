@@ -130,7 +130,7 @@ export default function TemplatesPage({ onOpenTemplate }) {
               </button>
             )}
             <button className="primary-btn" onClick={() => setShowUpload(true)}>
-              + Upload template
+              + New template
             </button>
           </div>
         </div>
@@ -209,10 +209,22 @@ export default function TemplatesPage({ onOpenTemplate }) {
   );
 }
 
+const CANVAS_PRESETS = [
+  { label: 'Square (1080×1080)', width: 1080, height: 1080 },
+  { label: 'Story / Reel (1080×1920)', width: 1080, height: 1920 },
+  { label: 'Landscape (1600×900)', width: 1600, height: 900 },
+  { label: 'Custom', width: null, height: null },
+];
+
 function UploadModal({ categories, onClose, onCreated }) {
+  const [tab, setTab] = useState('blank'); // 'blank' | 'upload' — blank first: it's the real starting point, not an afterthought
   const [name, setName] = useState('');
   const [categoryIds, setCategoryIds] = useState([]);
   const [file, setFile] = useState(null);
+  const [preset, setPreset] = useState(CANVAS_PRESETS[0]);
+  const [customW, setCustomW] = useState(1080);
+  const [customH, setCustomH] = useState(1080);
+  const [bgColor, setBgColor] = useState('#FFFFFF');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -220,7 +232,27 @@ function UploadModal({ categories, onClose, onCreated }) {
     setCategoryIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
   }
 
-  async function submit() {
+  async function submitBlank() {
+    setBusy(true);
+    setError('');
+    try {
+      const width = preset.width ?? Number(customW);
+      const height = preset.height ?? Number(customH);
+      const template = await api.createBlankTemplate({
+        name: name || 'Untitled Template',
+        width, height,
+        background_color: bgColor,
+        category_ids: categoryIds,
+      });
+      onCreated(template);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitUpload() {
     if (!file) { setError('Choose an image file first.'); return; }
     setBusy(true);
     setError('');
@@ -241,11 +273,41 @@ function UploadModal({ categories, onClose, onCreated }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Upload template</h3>
-        <div className="field">
-          <label>Template image (exported from Canva as PNG/JPG)</label>
-          <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} />
+        <h3>New template</h3>
+        <div className="mode-buttons" style={{ marginBottom: 16 }}>
+          <button className={tab === 'blank' ? 'active' : ''} onClick={() => setTab('blank')}>✏️ Start blank</button>
+          <button className={tab === 'upload' ? 'active' : ''} onClick={() => setTab('upload')}>⬆️ Upload image</button>
         </div>
+
+        {tab === 'blank' ? (
+          <>
+            <div className="field">
+              <label>Canvas size</label>
+              <select
+                value={CANVAS_PRESETS.indexOf(preset)}
+                onChange={(e) => setPreset(CANVAS_PRESETS[Number(e.target.value)])}
+              >
+                {CANVAS_PRESETS.map((p, i) => <option key={p.label} value={i}>{p.label}</option>)}
+              </select>
+            </div>
+            {preset.width === null && (
+              <div className="field" style={{ display: 'flex', gap: 10 }}>
+                <input type="number" value={customW} onChange={(e) => setCustomW(e.target.value)} placeholder="Width px" />
+                <input type="number" value={customH} onChange={(e) => setCustomH(e.target.value)} placeholder="Height px" />
+              </div>
+            )}
+            <div className="field">
+              <label>Background color</label>
+              <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
+            </div>
+          </>
+        ) : (
+          <div className="field">
+            <label>Template image</label>
+            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} />
+          </div>
+        )}
+
         <div className="field">
           <label>Name</label>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Instagram Quote Post" />
@@ -269,8 +331,8 @@ function UploadModal({ categories, onClose, onCreated }) {
         {error && <div className="error-text">{error}</div>}
         <div className="modal-actions">
           <button className="ghost-btn" onClick={onClose}>Cancel</button>
-          <button className="primary-btn" onClick={submit} disabled={busy}>
-            {busy ? 'Uploading…' : 'Upload & annotate'}
+          <button className="primary-btn" onClick={tab === 'blank' ? submitBlank : submitUpload} disabled={busy}>
+            {busy ? 'Creating…' : tab === 'blank' ? 'Create & start designing' : 'Upload & annotate'}
           </button>
         </div>
       </div>

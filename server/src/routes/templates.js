@@ -13,6 +13,7 @@ import {
 import { storeAsset, resolveAssetSource } from '../services/storage.js';
 import { getImageDimensions } from '../render/canvasRenderer.js';
 import { detectTextBlocks } from '../services/ocr.js';
+import { createCanvas } from '@napi-rs/canvas';
 import fs from 'fs';
 
 export default async function templatesRoutes(app) {
@@ -64,6 +65,38 @@ export default async function templatesRoutes(app) {
   // Create a template from an uploaded image (multipart: file field "image",
   // plus optional fields "name" and "category_ids" — a JSON-stringified
   // array, e.g. '["id1","id2"]'; omit or send '[]' for no category).
+  // POST /api/templates/blank
+  // Body (JSON, not multipart): { name, width, height, background_color, category_ids }
+  // Creates a template with a solid-color generated background and zero
+  // regions — a genuine from-scratch starting point. No image upload, no
+  // Canva design required. You land straight in the editor and draw.
+  app.post('/blank', async (req, reply) => {
+    const { name, width, height, background_color, category_ids } = req.body || {};
+    const w = Math.round(Number(width)) || 1080;
+    const h = Math.round(Number(height)) || 1080;
+    if (w < 50 || w > 8000 || h < 50 || h > 8000) {
+      return reply.code(400).send({ error: 'invalid_dimensions', message: 'width/height must be between 50 and 8000px' });
+    }
+
+    const canvas = createCanvas(w, h);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = background_color || '#FFFFFF';
+    ctx.fillRect(0, 0, w, h);
+    const fileBuffer = await canvas.encode('png');
+
+    const asset = await storeAsset(fileBuffer, 'blank.png', 'image/png');
+    const template = await createTemplate({
+      name: name || 'Untitled Template',
+      category_ids: category_ids || [],
+      canva_design_id: null,
+      source_image_url: asset.url,
+      thumbnail_url: asset.url,
+      width: w,
+      height: h,
+    });
+    reply.code(201).send(template);
+  });
+
   app.post('/', async (req, reply) => {
     if (!req.isMultipart()) {
       return reply.code(400).send({ error: 'expected multipart/form-data with an "image" file' });
