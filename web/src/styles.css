@@ -206,6 +206,10 @@ body {
 
 /* ---- Editor page ---- */
 .editor-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.live-render-warning {
+  background: rgba(255,209,102,.14); color: var(--amber); border-bottom: 1px solid rgba(255,209,102,.3);
+  padding: 8px 20px; font-size: 12.5px;
+}
 .editor-toolbar {
   display: flex; align-items: center; gap: 14px; padding: 10px 20px;
   border-bottom: 1px solid var(--border); flex-shrink: 0;

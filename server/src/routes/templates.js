@@ -139,7 +139,8 @@ export default async function templatesRoutes(app) {
         z_index: body.z_index ?? 0,
         max_characters: body.max_characters ?? null,
         original_style: style,
-        current_style: style,
+        current_style: body.current_style || style,
+        original_text: body.original_text ?? null,
         auto_shrink_to_fit: body.auto_shrink_to_fit ?? true,
       };
     } else if (body.type === 'image') {
@@ -158,6 +159,7 @@ export default async function templatesRoutes(app) {
         z_index: body.z_index ?? 0,
         ...props,
         original_properties: props,
+        original_image_url: body.original_image_url ?? null,
       };
     } else if (body.type === 'shape') {
       const props = {

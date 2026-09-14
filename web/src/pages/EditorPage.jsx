@@ -43,6 +43,8 @@ export default function EditorPage({ templateId, onBack }) {
   const [detectSelected, setDetectSelected] = useState(new Set());
   const [detectBusy, setDetectBusy] = useState(false);
   const [detectError, setDetectError] = useState('');
+  const [liveImageUrl, setLiveImageUrl] = useState(null);
+  const [liveRenderError, setLiveRenderError] = useState('');
 
   const load = useCallback(async () => {
     const t = await api.getTemplate(templateId);
@@ -50,6 +52,30 @@ export default function EditorPage({ templateId, onBack }) {
   }, [templateId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Live WYSIWYG preview: re-renders the actual design (using each region's
+  // current default text/image and style — the same fallback logic autofill
+  // itself uses) any time the template changes, so font/color/bold/position
+  // edits are immediately visible instead of invisible until a manual
+  // "Preview autofill" click. Debounced so dragging/typing doesn't spam
+  // the server with a render on every intermediate frame.
+  useEffect(() => {
+    if (!template) return;
+    const handle = setTimeout(async () => {
+      try {
+        const blob = await api.autofillPreview(templateId, {});
+        const url = URL.createObjectURL(blob);
+        setLiveImageUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+        setLiveRenderError('');
+      } catch (err) {
+        setLiveRenderError(err.message || 'Live preview unavailable');
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [template, templateId]);
 
   if (!template) return <div className="empty-state">Loading template…</div>;
 
@@ -246,6 +272,11 @@ export default function EditorPage({ templateId, onBack }) {
 
   return (
     <div className="editor-page">
+      {liveRenderError && (
+        <div className="live-render-warning">
+          ⚠ Live preview unavailable ({liveRenderError.includes('key') || liveRenderError.includes('Unauthorized') ? 'set your API key in the Templates page sidebar' : liveRenderError}) — showing the original background instead.
+        </div>
+      )}
       <div className="editor-toolbar">
         <button className="ghost-btn" onClick={onBack}>← Back</button>
         <input
@@ -277,7 +308,7 @@ export default function EditorPage({ templateId, onBack }) {
           onMouseUp={handleMouseUp}
           onMouseLeave={() => { setDraft(null); setDrag(null); }}
         >
-          <img src={template.source_image_url} alt={template.name} draggable={false} style={{ width: displayW, height: displayH }} />
+          <img src={liveImageUrl || template.source_image_url} alt={template.name} draggable={false} style={{ width: displayW, height: displayH }} />
 
           {regions.map((r) => (
             <div
