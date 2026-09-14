@@ -63,6 +63,13 @@ export default function TemplatesPage({ onOpenTemplate }) {
     setCanvaStatus((s) => ({ ...s, connected: false }));
   }
 
+  async function handleDeleteTemplate(e, t) {
+    e.stopPropagation();
+    if (!confirm(`Delete "${t.name}"? This can't be undone.`)) return;
+    await api.deleteTemplate(t.id);
+    refresh();
+  }
+
   return (
     <div className="templates-page">
       <div className="sidebar">
@@ -142,6 +149,9 @@ export default function TemplatesPage({ onOpenTemplate }) {
                 style={{ '--card-accent': colorForCategoryId(categories, (t.category_ids || [])[0]) }}
               >
                 <div className="template-card-accent" />
+                <span className="cat-delete template-delete" title="Delete template" onClick={(e) => handleDeleteTemplate(e, t)}>
+                  ✕
+                </span>
                 <div className="template-thumb">
                   <img src={t.thumbnail_url || t.source_image_url} alt={t.name} />
                 </div>

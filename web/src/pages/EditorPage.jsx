@@ -194,6 +194,12 @@ export default function EditorPage({ templateId, onBack }) {
     }));
   }
 
+  async function handleDeleteThisTemplate() {
+    if (!confirm(`Delete "${template.name}"? This can't be undone.`)) return;
+    await api.deleteTemplate(templateId);
+    onBack();
+  }
+
   async function handleDeleteRegion(region) {
     const target = region || selected;
     if (!target) return;
@@ -285,6 +291,7 @@ export default function EditorPage({ templateId, onBack }) {
           {detectBusy ? '🔍 Scanning…' : '🔍 Auto-detect text'}
         </button>
         <button className="primary-btn" onClick={() => setPreviewOpen(true)}>Preview autofill</button>
+        <button className="danger-btn" onClick={handleDeleteThisTemplate}>🗑 Delete</button>
       </div>
 
       <div className="editor-body">

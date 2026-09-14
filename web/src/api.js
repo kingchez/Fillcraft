@@ -98,9 +98,10 @@ export const api = {
     fd.append('image', file);
     return fetch(`${BASE}/templates/${templateId}/regions/${regionId}/default-image`, { method: 'POST', body: fd }).then(handle);
   },
-  // Autofill preview
+  // Autofill preview — hits /preview, not /autofill: same rendering, but
+  // never counted as real usage (see server/src/routes/autofill.js).
   autofillPreview: (templateId, values) =>
-    fetch(`${BASE}/templates/${templateId}/autofill`, {
+    fetch(`${BASE}/templates/${templateId}/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(values),

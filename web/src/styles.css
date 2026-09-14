@@ -122,6 +122,14 @@ body {
   position: relative;
 }
 .template-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-pop); border-color: var(--card-accent, var(--violet)); }
+.template-delete {
+  position: absolute; top: 12px; right: 8px; z-index: 2;
+  background: rgba(20,20,26,.55); backdrop-filter: blur(2px);
+  opacity: 0; font-size: 13px; padding: 4px 7px; border-radius: 6px; color: #fff;
+  transition: opacity .12s ease, color .12s ease, background .12s ease;
+}
+.template-card:hover .template-delete { opacity: 1; }
+.template-delete:hover { color: var(--coral); background: rgba(255,107,107,.25); }
 .template-card-accent { height: 5px; width: 100%; background: var(--card-accent, var(--grad-brand)); }
 .template-thumb { aspect-ratio: 1; background: var(--panel-2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .template-thumb img { width: 100%; height: 100%; object-fit: contain; }
