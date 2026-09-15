@@ -230,34 +230,33 @@ export default function EditorPage({ designId, onBack }) {
     onBack();
   }
 
-  if (!design) return <div className="empty-state">Loading design…</div>;
-
-  const displayW = design.width * scale;
-  const displayH = design.height * scale;
+  const displayW = (design?.width || 0) * scale;
+  const displayH = (design?.height || 0) * scale;
   const isTextSelected = selected && (selected.type === 'textbox' || selected.type === 'text' || selected.type === 'i-text');
 
   return (
     <div className="editor-page">
       <div className="editor-toolbar">
         <button className="ghost-btn" onClick={onBack}>← Back</button>
-        <button onClick={addText}>+ Text</button>
-        <button onClick={addRect}>+ Rectangle</button>
-        <button onClick={addCircle}>+ Circle</button>
-        <label className="ghost-btn" style={{ cursor: 'pointer' }}>
+        <button onClick={addText} disabled={!design}>+ Text</button>
+        <button onClick={addRect} disabled={!design}>+ Rectangle</button>
+        <button onClick={addCircle} disabled={!design}>+ Circle</button>
+        <label className="ghost-btn" style={{ cursor: design ? 'pointer' : 'default', opacity: design ? 1 : 0.5 }}>
           + Image
-          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={addImage} />
+          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={addImage} disabled={!design} />
         </label>
         <button className="ghost-btn" onClick={deleteSelected} disabled={!selected}>🗑 Delete selected</button>
         <div style={{ flex: 1 }} />
-        <button className="ghost-btn" onClick={saveDesign} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-        <button className="primary-btn" onClick={openPreview}>Preview autofill</button>
-        <button className="danger-btn" onClick={handleDeleteDesign}>🗑 Delete design</button>
+        <button className="ghost-btn" onClick={saveDesign} disabled={saving || !design}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="primary-btn" onClick={openPreview} disabled={!design}>Preview autofill</button>
+        <button className="danger-btn" onClick={handleDeleteDesign} disabled={!design}>🗑 Delete design</button>
       </div>
 
       {error && <div className="error-text" style={{ padding: '8px 16px' }}>{error}</div>}
 
       <div className="editor-body">
-        <div className="canvas-stage-wrapper" style={{ width: displayW, height: displayH }}>
+        <div className="canvas-stage" style={{ width: displayW || 400, height: displayH || 300, position: 'relative' }}>
+          {!design && <div className="empty-state" style={{ position: 'absolute', inset: 0 }}>Loading design…</div>}
           <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
             <canvas ref={canvasElRef} />
           </div>
