@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { listCustomFonts, createCustomFont } from '../services/templateStore.js';
+import { listCustomFonts, createCustomFont } from '../services/designsStore.js';
 import { storeAsset } from '../services/storage.js';
-import { registerFont } from '../render/canvasRenderer.js';
+import { registerFont } from '../render/imageUtils.js';
 import { markFontRegistered } from '../services/fontRegistry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

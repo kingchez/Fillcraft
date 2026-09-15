@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { getLocalUploadsDir } from '../db/sqlite.js';
-import { registerFont } from '../render/canvasRenderer.js';
-import { listCustomFonts } from './templateStore.js';
+import { getLocalUploadsDir } from './localFiles.js';
+import { registerFont } from '../render/imageUtils.js';
+import { listCustomFonts } from './designsStore.js';
 
 const registered = new Set();
 
@@ -47,15 +47,15 @@ export async function ensureGoogleFontRegistered(family) {
   }
 }
 
-// Scans a template's text regions for font families in use and makes sure
+// Scans a design's text objects for font families in use and makes sure
 // each is registered before rendering (covers Google Fonts on demand;
 // custom fonts are already registered at startup / at upload time).
-export async function ensureFontsForTemplate(template) {
+export async function ensureFontsForDesign(design) {
   const families = new Set();
-  for (const region of template.template_regions || []) {
-    if (region.type !== 'text') continue;
-    const style = region.current_style;
-    if (style?.font_family) families.add(style.font_family);
+  for (const obj of design.canvas_json?.objects || []) {
+    if ((obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text') && obj.fontFamily) {
+      families.add(obj.fontFamily);
+    }
   }
   await Promise.all([...families].map(ensureGoogleFontRegistered));
 }

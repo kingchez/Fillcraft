@@ -1,5 +1,5 @@
 import { resolveImageUrl } from '../services/imageFetch.js';
-import { normalizeProductImage } from '../render/canvasRenderer.js';
+import { normalizeProductImage } from '../render/imageUtils.js';
 
 export default async function imagesRoutes(app) {
   // POST /api/images/normalize

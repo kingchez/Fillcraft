@@ -1,4 +1,4 @@
-import { estimateTextCapacity } from '../render/canvasRenderer.js';
+import { estimateTextCapacity } from '../render/designRenderer.js';
 import { ensureGoogleFontRegistered } from '../services/fontRegistry.js';
 
 export default async function utilsRoutes(app) {

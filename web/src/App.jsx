@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import TemplatesPage from './pages/TemplatesPage.jsx';
+import DesignsPage from './pages/DesignsPage.jsx';
 import EditorPage from './pages/EditorPage.jsx';
 
 export default function App() {
-  const [view, setView] = useState({ name: 'list' }); // { name: 'list' } | { name: 'editor', templateId }
+  const [view, setView] = useState({ name: 'list' }); // { name: 'list' } | { name: 'editor', designId }
 
   return (
     <div className="app-shell">
@@ -26,16 +26,16 @@ export default function App() {
           </div>
           <div className="brand-text">
             <span className="brand-name">Fillcraft</span>
-            <span className="brand-sub">✨ personal Canva autofill engine</span>
+            <span className="brand-sub">✨ design + autofill, built by you</span>
           </div>
         </div>
       </header>
       <main className="app-main">
         {view.name === 'list' && (
-          <TemplatesPage onOpenTemplate={(id) => setView({ name: 'editor', templateId: id })} />
+          <DesignsPage onOpenDesign={(id) => setView({ name: 'editor', designId: id })} />
         )}
         {view.name === 'editor' && (
-          <EditorPage templateId={view.templateId} onBack={() => setView({ name: 'list' })} />
+          <EditorPage designId={view.designId} onBack={() => setView({ name: 'list' })} />
         )}
       </main>
     </div>

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { supabase as sb, supabaseAvailable as sbAvailable } from '../db/supabase.js';
-import { getLocalUploadsDir } from '../db/sqlite.js';
+import { getLocalUploadsDir } from './localFiles.js';
 
 const BUCKET = 'fillcraft-assets';
 

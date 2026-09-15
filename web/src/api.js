@@ -1,17 +1,7 @@
 const BASE = '/api';
-const API_KEY_STORAGE = 'fillcraft_api_key';
 
-export function getStoredApiKey() {
-  try { return localStorage.getItem(API_KEY_STORAGE) || ''; } catch { return ''; }
-}
-export function setStoredApiKey(key) {
-  try {
-    if (key) localStorage.setItem(API_KEY_STORAGE, key);
-    else localStorage.removeItem(API_KEY_STORAGE);
-  } catch { /* localStorage unavailable, ignore */ }
-}
 function authHeaders() {
-  const key = getStoredApiKey();
+  const key = localStorage.getItem('fillcraft_api_key');
   return key ? { 'x-api-key': key } : {};
 }
 
@@ -19,14 +9,51 @@ async function handle(res) {
   if (!res.ok) {
     let body;
     try { body = await res.json(); } catch { body = { error: res.statusText }; }
-    throw new Error(body.message || body.error || 'Request failed');
+    throw new Error(body.message || body.error || `Request failed (${res.status})`);
   }
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) return res.json();
-  return res;
+  if (res.status === 204) return null;
+  return res.json();
 }
 
 export const api = {
+  // Designs
+  listDesigns: () => fetch(`${BASE}/designs`).then(handle),
+  getDesign: (id) => fetch(`${BASE}/designs/${id}`).then(handle),
+  createBlankDesign: (body) =>
+    fetch(`${BASE}/designs/blank`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(handle),
+  updateDesign: (id, patch) =>
+    fetch(`${BASE}/designs/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).then(handle),
+  deleteDesign: (id) => fetch(`${BASE}/designs/${id}`, { method: 'DELETE' }).then(handle),
+  regenerateThumbnail: (id) => fetch(`${BASE}/designs/${id}/thumbnail`, { method: 'POST' }).then(handle),
+
+  // Autofill / preview — same payload shape ({ label: value, ... }), preview never logs usage
+  autofillPreview: (id, values) =>
+    fetch(`${BASE}/designs/${id}/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(values),
+    }).then((res) => {
+      if (!res.ok) return handle(res);
+      return res.blob();
+    }),
+  autofillRun: (id, values) =>
+    fetch(`${BASE}/designs/${id}/autofill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(values),
+    }).then((res) => {
+      if (!res.ok) return handle(res);
+      return res.blob();
+    }),
+
   // Categories
   listCategories: () => fetch(`${BASE}/categories`).then(handle),
   createCategory: (name) =>
@@ -37,6 +64,17 @@ export const api = {
     }).then(handle),
   deleteCategory: (id) => fetch(`${BASE}/categories/${id}`, { method: 'DELETE' }).then(handle),
 
+  // Fonts
+  listGoogleFonts: () => fetch(`${BASE}/fonts/google`).then(handle),
+  listCustomFonts: () => fetch(`${BASE}/fonts/custom`).then(handle),
+  uploadCustomFont: (file, familyName) => {
+    const fd = new FormData();
+    fd.append('font', file);
+    fd.append('family_name', familyName);
+    return fetch(`${BASE}/fonts/custom`, { method: 'POST', body: fd }).then(handle);
+  },
+
+  // Utils
   estimateTextCapacity: (params) =>
     fetch(`${BASE}/utils/estimate-text-capacity`, {
       method: 'POST',
@@ -44,85 +82,14 @@ export const api = {
       body: JSON.stringify(params),
     }).then(handle),
 
-  // Canva
-  canvaStatus: () => fetch(`${BASE}/canva/status`).then(handle),
-  canvaDisconnect: () => fetch(`${BASE}/canva/disconnect`, { method: 'POST' }).then(handle),
-  canvaListDesigns: (params = {}) => {
-    // Strip undefined/null/empty values before building the query string —
-    // URLSearchParams otherwise stringifies `undefined` itself as the text
-    // "undefined", turning "no search term" into a literal search for the
-    // word "undefined" and silently returning zero results.
-    const clean = Object.fromEntries(
-      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
-    );
-    const qs = new URLSearchParams(clean).toString();
-    return fetch(`${BASE}/canva/designs${qs ? `?${qs}` : ''}`).then(handle);
-  },
-  canvaImportDesign: (designId, opts = {}) =>
-    fetch(`${BASE}/canva/import/${designId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(opts),
-    }).then(handle),
-
-  // Templates
-  listTemplates: () => fetch(`${BASE}/templates`).then(handle),
-  getTemplate: (id) => fetch(`${BASE}/templates/${id}`).then(handle),
-  createTemplate: (formData) =>
-    fetch(`${BASE}/templates`, { method: 'POST', body: formData }).then(handle),
-  // Genuine blank-canvas creation — no image upload, no Canva involved.
-  createBlankTemplate: (body) =>
-    fetch(`${BASE}/templates/blank`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }).then(handle),
-  updateTemplate: (id, patch) =>
-    fetch(`${BASE}/templates/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    }).then(handle),
-  deleteTemplate: (id) => fetch(`${BASE}/templates/${id}`, { method: 'DELETE' }).then(handle),
-
-  // Regions
-  createRegion: (templateId, region) =>
-    fetch(`${BASE}/templates/${templateId}/regions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(region),
-    }).then(handle),
-  updateRegion: (templateId, regionId, patch) =>
-    fetch(`${BASE}/templates/${templateId}/regions/${regionId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    }).then(handle),
-  deleteRegion: (templateId, regionId) =>
-    fetch(`${BASE}/templates/${templateId}/regions/${regionId}`, { method: 'DELETE' }).then(handle),
-  uploadDefaultImage: (templateId, regionId, file) => {
+  // Image upload (used when adding an image object to the canvas)
+  uploadImage: (file) => {
     const fd = new FormData();
     fd.append('image', file);
-    return fetch(`${BASE}/templates/${templateId}/regions/${regionId}/default-image`, { method: 'POST', body: fd }).then(handle);
+    return fetch(`${BASE}/designs/upload-image`, { method: 'POST', body: fd }).then(handle);
   },
-  // Autofill preview — hits /preview, not /autofill: same rendering, but
-  // never counted as real usage (see server/src/routes/autofill.js).
-  autofillPreview: (templateId, values) =>
-    fetch(`${BASE}/templates/${templateId}/preview`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify(values),
-    }).then((res) => {
-      if (!res.ok) return handle(res);
-      return res.blob();
-    }),
 
-  detectTextRegions: (templateId) =>
-    fetch(`${BASE}/templates/${templateId}/detect-text-regions`, { method: 'POST' }).then(handle),
-
-  // Fonts
-  listGoogleFonts: () => fetch(`${BASE}/fonts/google`).then(handle),
-  listCustomFonts: () => fetch(`${BASE}/fonts/custom`).then(handle),
-  uploadCustomFont: (formData) =>
-    fetch(`${BASE}/fonts/custom`, { method: 'POST', body: formData }).then(handle),
+  // API key (stored client-side, sent as x-api-key on autofill/preview calls)
+  getApiKey: () => localStorage.getItem('fillcraft_api_key') || '',
+  setApiKey: (key) => localStorage.setItem('fillcraft_api_key', key || ''),
 };

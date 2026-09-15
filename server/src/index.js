@@ -7,15 +7,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import categoriesRoutes from './routes/categories.js';
-import templatesRoutes from './routes/templates.js';
-import autofillRoutes from './routes/autofill.js';
+import designsRoutes from './routes/designs.js';
 import imagesRoutes from './routes/images.js';
 import fontsRoutes from './routes/fonts.js';
-import canvaRoutes from './routes/canva.js';
 import utilsRoutes from './routes/utils.js';
 
-import { ensureLocalSchema, getLocalUploadsDir } from './db/sqlite.js';
 import { registerAllCustomFonts } from './services/fontRegistry.js';
+import { getLocalUploadsDir } from './services/localFiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,8 +35,6 @@ app.decorate('requireApiKey', async (req, reply) => {
 
 await app.register(cors, { origin: true });
 await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
-
-ensureLocalSchema();
 
 // Registering custom fonts touches Supabase at startup. If Supabase is slow
 // or briefly unreachable, this must never block the server from listening —
@@ -65,11 +61,9 @@ try {
 app.get('/api/health', async () => ({ ok: true, time: new Date().toISOString() }));
 
 await app.register(categoriesRoutes, { prefix: '/api/categories' });
-await app.register(templatesRoutes, { prefix: '/api/templates' });
-await app.register(autofillRoutes, { prefix: '/api/templates' });
+await app.register(designsRoutes, { prefix: '/api/designs' });
 await app.register(imagesRoutes, { prefix: '/api/images' });
 await app.register(fontsRoutes, { prefix: '/api/fonts' });
-await app.register(canvaRoutes, { prefix: '/api/canva' });
 await app.register(utilsRoutes, { prefix: '/api/utils' });
 
 // Serve the built admin frontend (web/dist) for everything else. This one

@@ -1,4 +1,4 @@
-import { listCategories, createCategory, deleteCategory } from '../services/templateStore.js';
+import { listCategories, createCategory, deleteCategory } from '../services/designsStore.js';
 
 export default async function categoriesRoutes(app) {
   app.get('/', async () => listCategories());
