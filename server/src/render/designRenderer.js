@@ -81,6 +81,22 @@ async function drawShape(ctx, obj) {
   if (obj.type === 'circle') {
     const r = (obj.radius || w / 2) * (obj.scaleX || 1);
     ctx.arc(x + r, y + r, r, 0, Math.PI * 2);
+  } else if (obj.type === 'triangle') {
+    ctx.moveTo(x + w / 2, y);
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x, y + h);
+    ctx.closePath();
+  } else if (obj.type === 'line') {
+    ctx.moveTo((obj.x1 || 0) * (obj.scaleX || 1) + x, (obj.y1 || 0) * (obj.scaleY || 1) + y);
+    ctx.lineTo((obj.x2 || 0) * (obj.scaleX || 1) + x, (obj.y2 || 0) * (obj.scaleY || 1) + y);
+  } else if (obj.type === 'polygon' || obj.type === 'polyline') {
+    const pts = obj.points || [];
+    pts.forEach((p, i) => {
+      const px = x + p.x * (obj.scaleX || 1);
+      const py = y + p.y * (obj.scaleY || 1);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    if (obj.type === 'polygon') ctx.closePath();
   } else if (obj.rx || obj.ry) {
     const r = Math.min(obj.rx || 0, w / 2, h / 2);
     ctx.moveTo(x + r, y);
@@ -101,6 +117,57 @@ async function drawShape(ctx, obj) {
     ctx.strokeStyle = obj.stroke;
     ctx.lineWidth = obj.strokeWidth;
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Icons and imported SVG shapes serialize as Fabric Path objects — obj.path
+// is an array of command arrays, e.g. ['M', x, y], ['C', x1,y1,x2,y2,x,y].
+// Interpreted directly rather than via Path2D for broader canvas-backend
+// compatibility.
+async function drawPath(ctx, obj) {
+  ctx.save();
+  ctx.globalAlpha = obj.opacity ?? 1;
+  const ox = obj.left || 0;
+  const oy = obj.top || 0;
+  const sx = obj.scaleX || 1;
+  const sy = obj.scaleY || 1;
+  // Path coordinates are relative to the path's own bounding box origin
+  // (pathOffset) in Fabric's serialization.
+  const offX = obj.pathOffset?.x || 0;
+  const offY = obj.pathOffset?.y || 0;
+
+  ctx.beginPath();
+  for (const cmd of obj.path || []) {
+    const [op, ...args] = cmd;
+    const tx = (n) => ox + (n - offX) * sx;
+    const ty = (n) => oy + (n - offY) * sy;
+    if (op === 'M') ctx.moveTo(tx(args[0]), ty(args[1]));
+    else if (op === 'L') ctx.lineTo(tx(args[0]), ty(args[1]));
+    else if (op === 'C') ctx.bezierCurveTo(tx(args[0]), ty(args[1]), tx(args[2]), ty(args[3]), tx(args[4]), ty(args[5]));
+    else if (op === 'Q') ctx.quadraticCurveTo(tx(args[0]), ty(args[1]), tx(args[2]), ty(args[3]));
+    else if (op === 'Z' || op === 'z') ctx.closePath();
+  }
+
+  if (obj.fill && obj.fill !== 'transparent') { ctx.fillStyle = obj.fill; ctx.fill(); }
+  if (obj.stroke && obj.strokeWidth) { ctx.strokeStyle = obj.stroke; ctx.lineWidth = obj.strokeWidth; ctx.stroke(); }
+  ctx.restore();
+}
+
+// Groups (multi-select "Group" action, or the result of an SVG import) nest
+// child objects with coordinates relative to the group's own center.
+// renderObject is passed in to avoid a circular reference at module scope.
+async function drawGroup(ctx, obj, values, fieldsByObjectId, renderObject) {
+  ctx.save();
+  ctx.translate(obj.left || 0, obj.top || 0);
+  ctx.rotate(((obj.angle || 0) * Math.PI) / 180);
+  ctx.scale(obj.scaleX || 1, obj.scaleY || 1);
+  // Fabric centers a group's own origin at its bounding-box center, so
+  // children (already relative to that center) render correctly with no
+  // further offset once we've translated/rotated/scaled into the group's
+  // local space.
+  for (const child of obj.objects || []) {
+    await renderObject(ctx, child, values, fieldsByObjectId);
   }
   ctx.restore();
 }
@@ -135,6 +202,30 @@ async function drawImage(ctx, obj, overrideSrc) {
   ctx.restore();
 }
 
+async function renderObject(ctx, obj, values, fieldsByObjectId) {
+  if (obj.visible === false) return;
+  try {
+    const field = fieldsByObjectId.get(obj.id);
+    const overrideValue = field ? values[field.label] : undefined;
+
+    if (obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text') {
+      await drawText(ctx, obj, overrideValue);
+    } else if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'line' || obj.type === 'polygon' || obj.type === 'polyline') {
+      await drawShape(ctx, obj);
+    } else if (obj.type === 'path') {
+      await drawPath(ctx, obj);
+    } else if (obj.type === 'group' || obj.type === 'activeSelection') {
+      await drawGroup(ctx, obj, values, fieldsByObjectId, renderObject);
+    } else if (obj.type === 'image') {
+      await drawImage(ctx, obj, overrideValue);
+    } else {
+      console.warn(`[designRenderer] skipping unsupported object type: ${obj.type}`);
+    }
+  } catch (err) {
+    console.error(`[designRenderer] failed to render object ${obj.id} (${obj.type}): ${err.message}`);
+  }
+}
+
 // values: plain object keyed by field label (matching fillcraft_design_fields.label)
 export async function renderDesign(design, values = {}) {
   const canvas = createCanvas(design.width, design.height);
@@ -146,23 +237,7 @@ export async function renderDesign(design, values = {}) {
   const fieldsByObjectId = new Map((design.fields || []).map((f) => [f.object_id, f]));
 
   for (const obj of objects) {
-    if (obj.visible === false) continue;
-    try {
-      const field = fieldsByObjectId.get(obj.id);
-      const overrideValue = field ? values[field.label] : undefined;
-
-      if (obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text') {
-        await drawText(ctx, obj, overrideValue);
-      } else if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'polygon') {
-        await drawShape(ctx, obj);
-      } else if (obj.type === 'image') {
-        await drawImage(ctx, obj, overrideValue);
-      } else {
-        console.warn(`[designRenderer] skipping unsupported object type: ${obj.type}`);
-      }
-    } catch (err) {
-      console.error(`[designRenderer] failed to render object ${obj.id} (${obj.type}): ${err.message}`);
-    }
+    await renderObject(ctx, obj, values, fieldsByObjectId);
   }
 
   return canvas.encode('png');

@@ -219,9 +219,13 @@ body {
   padding: 8px 20px; font-size: 12.5px;
 }
 .editor-toolbar {
-  display: flex; align-items: center; gap: 14px; padding: 10px 20px;
+  display: flex; align-items: center; gap: 8px; padding: 10px 20px; flex-wrap: wrap;
   border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
+.editor-toolbar button { white-space: nowrap; }
+.toolbar-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+.zoom-label { font-size: 12.5px; color: var(--muted); min-width: 42px; text-align: center; }
+
 .template-name-input {
   background: transparent; border: none; color: var(--text); font-size: 15px; font-weight: 700;
   border-bottom: 1px dashed transparent;
@@ -236,8 +240,26 @@ body {
 .mode-buttons button.active { background: var(--grad-primary); color: #1a1024; border-color: transparent; font-weight: 700; }
 
 .editor-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.editor-body-centered { align-items: center; justify-content: center; overflow: auto; }
 .canvas-stage { position: relative; margin: 24px; background: #0A0812; flex-shrink: 0; user-select: none; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-soft); }
 .canvas-stage img { display: block; user-select: none; pointer-events: none; }
+
+.field-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.field-row .field { flex: 1; margin-bottom: 0; }
+.align-row { display: flex; gap: 4px; }
+.align-row button {
+  flex: 1; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 0; border-radius: 7px; cursor: pointer; font-size: 14px; transition: all .12s ease;
+}
+.align-row button:hover { border-color: var(--violet); color: var(--violet); }
+
+.icon-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; max-height: 320px; overflow-y: auto; margin-top: 12px; }
+.icon-grid-item {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color .12s ease;
+}
+.icon-grid-item:hover { border-color: var(--violet); }
+.icon-grid-item img { width: 24px; height: 24px; }
 
 .region-box {
   position: absolute; border: 2px solid rgba(167,139,250,.6); background: rgba(167,139,250,.08);
