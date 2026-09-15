@@ -39,6 +39,20 @@ export default function EditorPage({ designId, onBack }) {
   // ---- Load the design and initialize the Fabric canvas ----
   useEffect(() => {
     let cancelled = false;
+    let spaceHeld = false;
+    let isPanning = false;
+    let lastPanPoint = null;
+
+    const onSpaceDown = (e) => {
+      const canvas = fabricRef.current;
+      if (e.code === 'Space' && !e.repeat && canvas) { spaceHeld = true; canvas.defaultCursor = 'grab'; canvas.selection = false; }
+    };
+    const onSpaceUp = (e) => {
+      const canvas = fabricRef.current;
+      if (e.code === 'Space' && canvas) { spaceHeld = false; canvas.defaultCursor = 'default'; canvas.selection = true; }
+    };
+    window.addEventListener('keydown', onSpaceDown);
+    window.addEventListener('keyup', onSpaceUp);
 
     (async () => {
       const d = await api.getDesign(designId);
@@ -53,6 +67,23 @@ export default function EditorPage({ designId, onBack }) {
         preserveObjectStacking: true,
       });
       fabricRef.current = canvas;
+
+      // ---- Pan: hold Space + drag, like Figma/Canva. Doesn't interfere
+      // with normal object dragging, which has no modifier key. ----
+      canvas.on('mouse:down', (opt) => {
+        if (!spaceHeld) return;
+        isPanning = true;
+        lastPanPoint = { x: opt.e.clientX, y: opt.e.clientY };
+        canvas.defaultCursor = 'grabbing';
+      });
+      canvas.on('mouse:move', (opt) => {
+        if (!isPanning || !lastPanPoint) return;
+        const dx = opt.e.clientX - lastPanPoint.x;
+        const dy = opt.e.clientY - lastPanPoint.y;
+        lastPanPoint = { x: opt.e.clientX, y: opt.e.clientY };
+        canvas.relativePan({ x: dx, y: dy });
+      });
+      canvas.on('mouse:up', () => { isPanning = false; canvas.defaultCursor = spaceHeld ? 'grab' : 'default'; });
 
       try {
         await canvas.loadFromJSON(d.canvas_json || { objects: [] });
@@ -91,6 +122,8 @@ export default function EditorPage({ designId, onBack }) {
 
     return () => {
       cancelled = true;
+      window.removeEventListener('keydown', onSpaceDown);
+      window.removeEventListener('keyup', onSpaceUp);
       fabricRef.current?.dispose();
       fabricRef.current = null;
     };
