@@ -183,6 +183,31 @@ export async function syncDesignFields(designId, canvasJson) {
   }
 }
 
+// ---------------- Canva OAuth connection ----------------
+// Single-row table — Fillcraft is a single-user tool, one Canva account
+// connected at a time.
+
+export async function getCanvaConnection() {
+  assertSupabase();
+  const { data, error } = await supabase.from('fillcraft_canva_connection').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function saveCanvaConnection({ access_token, refresh_token, scope, expires_at }) {
+  assertSupabase();
+  await supabase.from('fillcraft_canva_connection').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  const { error } = await supabase.from('fillcraft_canva_connection').insert({
+    id: randomUUID(), access_token, refresh_token, scope, expires_at, created_at: nowIso(), updated_at: nowIso(),
+  });
+  if (error) throw error;
+}
+
+export async function clearCanvaConnection() {
+  assertSupabase();
+  await supabase.from('fillcraft_canva_connection').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+}
+
 // ---------------- Usage log ----------------
 
 export async function logDesignUsage(designId, source = 'autofill') {

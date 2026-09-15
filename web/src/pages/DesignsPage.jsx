@@ -9,6 +9,8 @@ export default function DesignsPage({ onOpenDesign }) {
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [showNewCategory, setShowNewCategory] = useState(false);
+  const [showCanvaImport, setShowCanvaImport] = useState(false);
+  const [canvaStatus, setCanvaStatus] = useState(null);
 
   async function refresh() {
     setLoading(true);
@@ -18,7 +20,10 @@ export default function DesignsPage({ onOpenDesign }) {
     setLoading(false);
   }
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+    api.canvaStatus().then(setCanvaStatus).catch(() => setCanvaStatus({ configured: false, connected: false }));
+  }, []);
 
   const filtered =
     activeCategory === 'all' ? designs : designs.filter((d) => (d.category_ids || []).includes(activeCategory));
@@ -58,6 +63,25 @@ export default function DesignsPage({ onOpenDesign }) {
           </div>
         ))}
         <button className="ghost-btn full new-cat-btn" onClick={() => setShowNewCategory(true)}>+ New category</button>
+
+        <div className="sidebar-title canva-title">Canva import</div>
+        {canvaStatus && !canvaStatus.configured && (
+          <p className="hint-text">Not set up yet — add <code>CANVA_CLIENT_ID</code>, <code>CANVA_CLIENT_SECRET</code>, <code>CANVA_REDIRECT_URI</code> in Dokploy.</p>
+        )}
+        {canvaStatus?.configured && !canvaStatus.connected && (
+          <a className="ghost-btn full" href="/api/canva/connect">Connect Canva</a>
+        )}
+        {canvaStatus?.configured && canvaStatus.connected && (
+          <>
+            <button className="primary-btn full" onClick={() => setShowCanvaImport(true)}>Import from Canva</button>
+            <button
+              className="ghost-btn full"
+              onClick={async () => { if (confirm('Disconnect Canva?')) { await api.canvaDisconnect(); setCanvaStatus((s) => ({ ...s, connected: false })); } }}
+            >
+              Disconnect
+            </button>
+          </>
+        )}
 
         <div className="sidebar-title canva-title">API access</div>
         <ApiKeySettings />
@@ -118,6 +142,16 @@ export default function DesignsPage({ onOpenDesign }) {
 
       {showNewCategory && (
         <NewCategoryModal onClose={() => setShowNewCategory(false)} onCreated={() => { setShowNewCategory(false); refresh(); }} />
+      )}
+
+      {showCanvaImport && (
+        <CanvaImportModal
+          onClose={() => setShowCanvaImport(false)}
+          onImported={(d) => {
+            setShowCanvaImport(false);
+            refresh().then(() => onOpenDesign(d.id));
+          }}
+        />
       )}
     </div>
   );
@@ -227,6 +261,76 @@ function ApiKeySettings() {
       </p>
       <input type="password" placeholder="Paste your API key…" value={key} onChange={(e) => setKey(e.target.value)} />
       <button className="ghost-btn full" onClick={handleSave}>{saved ? 'Saved ✓' : 'Save'}</button>
+    </div>
+  );
+}
+
+function CanvaImportModal({ onClose, onImported }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [importingId, setImportingId] = useState(null);
+  const [error, setError] = useState('');
+
+  async function search(q) {
+    setLoading(true);
+    try {
+      const data = await api.canvaListDesigns(q);
+      setResults(data.items || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { search(''); }, []);
+
+  async function handleImport(design) {
+    setImportingId(design.id);
+    setError('');
+    try {
+      const created = await api.canvaImportDesign(design.id, design.title);
+      const quality = created.extraction_source === 'svg' ? 'high-fidelity SVG' : 'flattened image only (SVG unavailable for this design)';
+      alert(`Imported "${design.title}" — ${created.elements_extracted} editable element${created.elements_extracted === 1 ? '' : 's'} extracted (${quality}). Review it in the editor.`);
+      onImported(created);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImportingId(null);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Import from Canva</h3>
+        <p className="hint-text">Text, images, and basic shapes come in as real editable objects when Canva's SVG export is available; everything else stays visible as a flattened background layer.</p>
+        <input
+          type="text" placeholder="Search your Canva designs…" value={query}
+          onChange={(e) => { setQuery(e.target.value); search(e.target.value); }}
+        />
+        {error && <div className="error-text">{error}</div>}
+        {loading ? (
+          <div className="hint-text" style={{ marginTop: 12 }}>Loading…</div>
+        ) : (
+          <div className="canva-design-grid">
+            {results.map((d) => (
+              <div key={d.id} className="canva-design-item">
+                {d.thumbnail_url ? <img src={d.thumbnail_url} alt={d.title} /> : <div className="no-thumb">No preview</div>}
+                <div className="canva-design-title">{d.title}</div>
+                <button className="ghost-btn full" disabled={importingId === d.id} onClick={() => handleImport(d)}>
+                  {importingId === d.id ? 'Importing…' : 'Import'}
+                </button>
+              </div>
+            ))}
+            {results.length === 0 && <div className="hint-text">No designs found.</div>}
+          </div>
+        )}
+        <div className="modal-actions">
+          <button className="ghost-btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
     </div>
   );
 }

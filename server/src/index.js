@@ -11,6 +11,7 @@ import designsRoutes from './routes/designs.js';
 import imagesRoutes from './routes/images.js';
 import fontsRoutes from './routes/fonts.js';
 import utilsRoutes from './routes/utils.js';
+import canvaRoutes from './routes/canva.js';
 
 import { registerAllCustomFonts } from './services/fontRegistry.js';
 import { getLocalUploadsDir } from './services/localFiles.js';
@@ -65,6 +66,7 @@ await app.register(designsRoutes, { prefix: '/api/designs' });
 await app.register(imagesRoutes, { prefix: '/api/images' });
 await app.register(fontsRoutes, { prefix: '/api/fonts' });
 await app.register(utilsRoutes, { prefix: '/api/utils' });
+await app.register(canvaRoutes, { prefix: '/api/canva' });
 
 // Serve the built admin frontend (web/dist) for everything else. This one
 // registers first so it owns the `reply.sendFile` decorator (only one

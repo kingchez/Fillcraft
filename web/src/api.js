@@ -54,6 +54,17 @@ export const api = {
       return res.blob();
     }),
 
+  // Canva import (OAuth-based — see server for why URL-scraping isn't used)
+  canvaStatus: () => fetch(`${BASE}/canva/status`).then(handle),
+  canvaDisconnect: () => fetch(`${BASE}/canva/disconnect`, { method: 'POST' }).then(handle),
+  canvaListDesigns: (query) => fetch(`${BASE}/canva/designs${query ? `?query=${encodeURIComponent(query)}` : ''}`).then(handle),
+  canvaImportDesign: (designId, name) =>
+    fetch(`${BASE}/canva/import/${designId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).then(handle),
+
   // Categories
   listCategories: () => fetch(`${BASE}/categories`).then(handle),
   createCategory: (name) =>
