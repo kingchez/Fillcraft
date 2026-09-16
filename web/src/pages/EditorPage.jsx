@@ -539,11 +539,13 @@ export default function EditorPage({ designId, onBack }) {
 
       {error && <div className="error-text" style={{ padding: '8px 16px' }}>{error}</div>}
 
-      <div className="editor-body editor-body-centered">
-        <div className="canvas-stage" style={{ width: displayW || 400, height: displayH || 300, position: 'relative' }}>
-          {!design && <div className="empty-state" style={{ position: 'absolute', inset: 0 }}>Loading design…</div>}
-          <div style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'top left' }}>
-            <canvas ref={canvasElRef} />
+      <div className="editor-body">
+        <div className="canvas-viewport">
+          <div className="canvas-stage" style={{ width: displayW || 400, height: displayH || 300, position: 'relative' }}>
+            {!design && <div className="empty-state" style={{ position: 'absolute', inset: 0 }}>Loading design…</div>}
+            <div style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'top left' }}>
+              <canvas ref={canvasElRef} />
+            </div>
           </div>
         </div>
 

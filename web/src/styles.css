@@ -244,7 +244,7 @@ body {
 .mode-buttons button.active { background: var(--grad-primary); color: #1a1024; border-color: transparent; font-weight: 700; }
 
 .editor-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
-.editor-body-centered { align-items: center; justify-content: center; overflow: auto; }
+.canvas-viewport { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: auto; }
 .canvas-stage { position: relative; margin: 24px; background: #0A0812; flex-shrink: 0; user-select: none; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-soft); }
 .canvas-stage img { display: block; user-select: none; pointer-events: none; }
 
