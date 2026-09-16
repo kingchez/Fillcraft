@@ -543,7 +543,7 @@ export default function EditorPage({ designId, onBack }) {
         <div className="canvas-viewport">
           <div className="canvas-stage" style={{ width: displayW || 400, height: displayH || 300, position: 'relative' }}>
             {!design && <div className="empty-state" style={{ position: 'absolute', inset: 0 }}>Loading design…</div>}
-            <div style={{ transform: `scale(${effectiveScale})`, transformOrigin: 'top left' }}>
+            <div style={{ width: design?.width || 0, height: design?.height || 0, overflow: 'hidden', transform: `scale(${effectiveScale})`, transformOrigin: 'top left' }}>
               <canvas ref={canvasElRef} />
             </div>
           </div>

@@ -5,6 +5,7 @@ import {
   listDesigns, getDesign, getExportFormats, createExportJob, waitForExport,
 } from '../services/canvaApi.js';
 import { svgToFabricObjects, resolveImageHref } from '../services/svgToFabric.js';
+import { pptxToFabricObjects, extractMedia } from '../services/pptxToFabric.js';
 import { storeAsset } from '../services/storage.js';
 import { createDesign } from '../services/designsStore.js';
 
@@ -107,7 +108,36 @@ export default async function canvaRoutes(app) {
             objects.push(obj);
           }
         } catch (svgErr) {
-          req.log.warn(`SVG extraction failed, importing as flattened background only: ${svgErr.message}`);
+          req.log.warn(`SVG extraction failed: ${svgErr.message}`);
+        }
+      }
+
+      // PPTX fallback — tried whenever SVG didn't produce anything, not just
+      // when it's outright unavailable. Canva offers PPTX export far more
+      // consistently across design types than SVG.
+      if (objects.length === 0) {
+        try {
+          const pptxBuffer = await downloadExport(designId, 'pptx');
+          const result = await pptxToFabricObjects(pptxBuffer, { targetWidthPx: width, targetHeightPx: height });
+          extractionSource = extractionSource === 'svg' ? 'svg+pptx' : 'pptx';
+
+          for (const obj of result.objects) {
+            if (obj._pendingSrc) {
+              try {
+                const buffer = await extractMedia(result.zip, result.imageMediaPaths[obj.id]);
+                const ext = result.imageMediaPaths[obj.id].split('.').pop() || 'png';
+                const asset = await storeAsset(buffer, `${designId}-${obj.id}.${ext}`, `image/${ext}`);
+                obj.src = asset.url;
+              } catch (imgErr) {
+                req.log.warn(`Could not extract PPTX embedded image: ${imgErr.message}`);
+                continue;
+              }
+              delete obj._pendingSrc;
+            }
+            objects.push(obj);
+          }
+        } catch (pptxErr) {
+          req.log.warn(`PPTX extraction also failed, importing as flattened background only: ${pptxErr.message}`);
         }
       }
 

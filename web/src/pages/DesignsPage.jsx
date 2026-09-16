@@ -291,8 +291,21 @@ function CanvaImportModal({ onClose, onImported }) {
     setError('');
     try {
       const created = await api.canvaImportDesign(design.id, design.title);
-      const quality = created.extraction_source === 'svg' ? 'high-fidelity SVG' : 'flattened image only (SVG unavailable for this design)';
-      alert(`Imported "${design.title}" — ${created.elements_extracted} editable element${created.elements_extracted === 1 ? '' : 's'} extracted (${quality}). Review it in the editor.`);
+      if (created.elements_extracted === 0) {
+        const keep = confirm(
+          `"${design.title}" imported with no individually editable elements — only a flattened background image ` +
+          `(${created.extraction_source === 'svg' ? 'SVG export ran but found nothing extractable' : "Canva didn't offer SVG export for this design"}).\n\n` +
+          `Keep it as a flattened background to design on top of? Cancel to discard it instead.`
+        );
+        if (!keep) {
+          await api.deleteDesign(created.id);
+          setImportingId(null);
+          return;
+        }
+      } else {
+        const quality = created.extraction_source === 'svg' ? 'high-fidelity SVG' : 'flattened image only (SVG unavailable for this design)';
+        alert(`Imported "${design.title}" — ${created.elements_extracted} editable element${created.elements_extracted === 1 ? '' : 's'} extracted (${quality}). Review it in the editor.`);
+      }
       onImported(created);
     } catch (err) {
       setError(err.message);
@@ -303,7 +316,7 @@ function CanvaImportModal({ onClose, onImported }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <h3>Import from Canva</h3>
         <p className="hint-text">Text, images, and basic shapes come in as real editable objects when Canva's SVG export is available; everything else stays visible as a flattened background layer.</p>
         <input
