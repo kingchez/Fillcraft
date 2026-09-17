@@ -17,7 +17,7 @@ export function registerFont(filePath, family) {
 
 export async function normalizeProductImage(
   buffer,
-  { canvasSize = 1000, backgroundColor = '#FFFFFF', maxContentRatio = 0.85 } = {}
+  { canvasSize = 1200, backgroundColor = '#FFFFFF', maxContentRatio = 0.95 } = {}
 ) {
   const img = await loadImage(buffer);
   const canvas = createCanvas(canvasSize, canvasSize);

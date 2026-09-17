@@ -8,9 +8,9 @@ export default async function imagesRoutes(app) {
   app.post('/normalize', { preHandler: app.requireApiKey }, async (req, reply) => {
     const {
       image_url,
-      canvas_size = 1000,
+      canvas_size = 1200,
       background_color = '#FFFFFF',
-      max_content_ratio = 0.85,
+      max_content_ratio = 0.95,
       strip_size_suffix = true,
     } = req.body || {};
 
