@@ -93,6 +93,10 @@ export const api = {
       body: JSON.stringify(params),
     }).then(handle),
 
+  // Uploads panel — bucket assets, reusable across designs
+  listAssets: () => fetch(`${BASE}/designs/assets`).then(handle),
+  deleteAsset: (key) => fetch(`${BASE}/designs/assets/${encodeURIComponent(key)}`, { method: 'DELETE' }).then(handle),
+
   // Image upload (used when adding an image object to the canvas)
   uploadImage: (file) => {
     const fd = new FormData();

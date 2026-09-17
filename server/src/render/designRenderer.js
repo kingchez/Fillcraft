@@ -76,27 +76,28 @@ async function drawShape(ctx, obj) {
   const y = obj.top || 0;
   const w = (obj.width || 0) * (obj.scaleX || 1);
   const h = (obj.height || 0) * (obj.scaleY || 1);
+  const shapeType = String(obj.type || '').toLowerCase();
 
   ctx.beginPath();
-  if (obj.type === 'circle') {
+  if (shapeType === 'circle') {
     const r = (obj.radius || w / 2) * (obj.scaleX || 1);
     ctx.arc(x + r, y + r, r, 0, Math.PI * 2);
-  } else if (obj.type === 'triangle') {
+  } else if (shapeType === 'triangle') {
     ctx.moveTo(x + w / 2, y);
     ctx.lineTo(x + w, y + h);
     ctx.lineTo(x, y + h);
     ctx.closePath();
-  } else if (obj.type === 'line') {
+  } else if (shapeType === 'line') {
     ctx.moveTo((obj.x1 || 0) * (obj.scaleX || 1) + x, (obj.y1 || 0) * (obj.scaleY || 1) + y);
     ctx.lineTo((obj.x2 || 0) * (obj.scaleX || 1) + x, (obj.y2 || 0) * (obj.scaleY || 1) + y);
-  } else if (obj.type === 'polygon' || obj.type === 'polyline') {
+  } else if (shapeType === 'polygon' || shapeType === 'polyline') {
     const pts = obj.points || [];
     pts.forEach((p, i) => {
       const px = x + p.x * (obj.scaleX || 1);
       const py = y + p.y * (obj.scaleY || 1);
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     });
-    if (obj.type === 'polygon') ctx.closePath();
+    if (shapeType === 'polygon') ctx.closePath();
   } else if (obj.rx || obj.ry) {
     const r = Math.min(obj.rx || 0, w / 2, h / 2);
     ctx.moveTo(x + r, y);
@@ -196,7 +197,19 @@ async function drawImage(ctx, obj, overrideSrc) {
   ctx.save();
   ctx.globalAlpha = obj.opacity ?? 1;
   ctx.beginPath();
-  ctx.rect(x, y, w, h);
+  if (obj.clipPath?.rx || obj.clipPath?.ry) {
+    // clipPath rx/ry are in the image's own unscaled coordinate space, same
+    // convention the editor uses when creating it (applyCornerRadius).
+    const r = Math.min(obj.clipPath.rx || 0, w / 2, h / 2) * (obj.scaleX || 1);
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  } else {
+    ctx.rect(x, y, w, h);
+  }
   ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.restore();
@@ -207,16 +220,22 @@ async function renderObject(ctx, obj, values, fieldsByObjectId) {
   try {
     const field = fieldsByObjectId.get(obj.id);
     const overrideValue = field ? values[field.label] : undefined;
+    // Objects round-tripped through a real Fabric canvas serialize with
+    // Fabric's own PascalCase type names (Rect, Textbox, Image, ...);
+    // objects authored directly by our own import converters use lowercase
+    // (rect, textbox, ...). Normalize once here so both are handled the
+    // same way, instead of only matching one casing.
+    const type = String(obj.type || '').toLowerCase();
 
-    if (obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text') {
+    if (type === 'textbox' || type === 'text' || type === 'i-text') {
       await drawText(ctx, obj, overrideValue);
-    } else if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'line' || obj.type === 'polygon' || obj.type === 'polyline') {
+    } else if (type === 'rect' || type === 'circle' || type === 'triangle' || type === 'line' || type === 'polygon' || type === 'polyline') {
       await drawShape(ctx, obj);
-    } else if (obj.type === 'path') {
+    } else if (type === 'path') {
       await drawPath(ctx, obj);
-    } else if (obj.type === 'group' || obj.type === 'activeSelection') {
+    } else if (type === 'group' || type === 'activeselection') {
       await drawGroup(ctx, obj, values, fieldsByObjectId, renderObject);
-    } else if (obj.type === 'image') {
+    } else if (type === 'image') {
       await drawImage(ctx, obj, overrideValue);
     } else {
       console.warn(`[designRenderer] skipping unsupported object type: ${obj.type}`);

@@ -4,7 +4,7 @@ import {
 import { renderDesign } from '../render/designRenderer.js';
 import { ensureFontsForDesign } from '../services/fontRegistry.js';
 import { getLocalUploadsDir } from '../services/localFiles.js';
-import { storeAsset } from '../services/storage.js';
+import { storeAsset, listAssets, deleteAssetByKey } from '../services/storage.js';
 import { createCanvas } from '@napi-rs/canvas';
 
 export default async function designsRoutes(app) {
@@ -27,6 +27,15 @@ export default async function designsRoutes(app) {
     if (!fileBuffer) return reply.code(400).send({ error: 'image file is required' });
     const asset = await storeAsset(fileBuffer, filename, mimetype || 'image/png');
     reply.code(201).send({ url: asset.url });
+  });
+
+  // GET /api/designs/assets — everything previously uploaded, for the
+  // editor's Uploads panel (reuse without re-uploading).
+  app.get('/assets', async () => listAssets());
+
+  app.delete('/assets/:key', async (req, reply) => {
+    await deleteAssetByKey(req.params.key);
+    reply.code(204).send();
   });
 
   app.get('/', async () => listDesigns());

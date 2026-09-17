@@ -2,18 +2,54 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as fabric from 'fabric';
 import { api } from '../api.js';
 
-const DISPLAY_MAX_WIDTH = 640;
-const GOOGLE_FONTS_QUICKLIST = ['Inter', 'Poppins', 'Nunito', 'Montserrat', 'Playfair Display', 'Roboto', 'Oswald', 'Lora'];
+const DISPLAY_MAX_WIDTH = 560;
+const GOOGLE_FONTS_QUICKLIST = [
+  'Inter', 'Poppins', 'Nunito', 'Montserrat', 'Playfair Display', 'Roboto', 'Oswald', 'Lora',
+  'Bebas Neue', 'Anton', 'Raleway', 'Merriweather', 'Work Sans', 'DM Sans', 'Space Grotesk',
+  'Pacifico', 'Caveat', 'Abril Fatface', 'Archivo Black', 'Josefin Sans', 'Libre Baskerville',
+  'Fjalla One', 'Cormorant Garamond', 'Dancing Script', 'Bitter', 'Karla', 'Comfortaa',
+];
 const HISTORY_LIMIT = 50;
 
 function newId() {
   return crypto.randomUUID();
 }
 
+const loadedFonts = new Set();
+function loadGoogleFontInBrowser(family) {
+  if (!family || loadedFonts.has(family)) return;
+  loadedFonts.add(family);
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:ital,wght@0,400;0,700;1,400&display=swap`;
+  document.head.appendChild(link);
+}
+
+function toHexColor(color) {
+  if (!color) return '000000';
+  if (color.startsWith('#')) return color.slice(1);
+  const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (m) return [1, 2, 3].map((i) => Number(m[i]).toString(16).padStart(2, '0')).join('');
+  return '000000';
+}
+
 function iconSvgUrl(prefix, name, color) {
-  const params = new URLSearchParams({ height: '512' });
-  if (color) params.set('color', color);
+  const params = new URLSearchParams({ height: '512', color: `#${toHexColor(color)}` });
   return `https://api.iconify.design/${prefix}/${name}.svg?${params.toString()}`;
+}
+
+function starPoints(spikes, outerR, innerR) {
+  const pts = [];
+  const step = Math.PI / spikes;
+  let rot = -Math.PI / 2;
+  const cx = outerR, cy = outerR;
+  for (let i = 0; i < spikes; i++) {
+    pts.push({ x: cx + Math.cos(rot) * outerR, y: cy + Math.sin(rot) * outerR });
+    rot += step;
+    pts.push({ x: cx + Math.cos(rot) * innerR, y: cy + Math.sin(rot) * innerR });
+    rot += step;
+  }
+  return pts;
 }
 
 export default function EditorPage({ designId, onBack }) {
@@ -22,7 +58,7 @@ export default function EditorPage({ designId, onBack }) {
   const historyRef = useRef({ stack: [], index: -1, suppress: false });
   const [design, setDesign] = useState(null);
   const [baseScale, setBaseScale] = useState(1);
-  const [zoom, setZoom] = useState(1); // user-controlled, on top of baseScale
+  const [zoom, setZoom] = useState(1);
   const [selected, setSelected] = useState(null);
   const [multiSelected, setMultiSelected] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -35,8 +71,11 @@ export default function EditorPage({ designId, onBack }) {
   const [iconQuery, setIconQuery] = useState('arrow');
   const [iconResults, setIconResults] = useState([]);
   const [canvasBg, setCanvasBg] = useState('#FFFFFF');
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [leftTab, setLeftTab] = useState('elements');
+  const [uploads, setUploads] = useState([]);
+  const [uploadsLoading, setUploadsLoading] = useState(false);
 
-  // ---- Load the design and initialize the Fabric canvas ----
   useEffect(() => {
     let cancelled = false;
     let spaceHeld = false;
@@ -68,8 +107,6 @@ export default function EditorPage({ designId, onBack }) {
       });
       fabricRef.current = canvas;
 
-      // ---- Pan: hold Space + drag, like Figma/Canva. Doesn't interfere
-      // with normal object dragging, which has no modifier key. ----
       canvas.on('mouse:down', (opt) => {
         if (!spaceHeld) return;
         isPanning = true;
@@ -104,17 +141,16 @@ export default function EditorPage({ designId, onBack }) {
       canvas.on('selection:cleared', () => { setSelected(null); setMultiSelected(false); });
       canvas.on('object:modified', syncSelection);
 
-      // ---- Undo/redo history ----
       const pushHistory = () => {
         if (historyRef.current.suppress) return;
-        const json = canvas.toJSON(['id', 'fillcraftField']);
+        const json = canvas.toObject(['id', 'fillcraftField']);
         const h = historyRef.current;
         h.stack = h.stack.slice(0, h.index + 1);
         h.stack.push(json);
         if (h.stack.length > HISTORY_LIMIT) h.stack.shift();
         h.index = h.stack.length - 1;
       };
-      pushHistory(); // initial state
+      pushHistory();
       canvas.on('object:added', pushHistory);
       canvas.on('object:removed', pushHistory);
       canvas.on('object:modified', pushHistory);
@@ -129,7 +165,6 @@ export default function EditorPage({ designId, onBack }) {
     };
   }, [designId]);
 
-  // ---- Keyboard shortcuts ----
   useEffect(() => {
     function onKeyDown(e) {
       const canvas = fabricRef.current;
@@ -138,7 +173,7 @@ export default function EditorPage({ designId, onBack }) {
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || canvas.getActiveObject()?.isEditing;
       if (typing) return;
 
-      if ((e.key === 'Delete' || e.key === 'Backspace')) {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteSelected();
       } else if (e.key.startsWith('Arrow')) {
@@ -164,6 +199,27 @@ export default function EditorPage({ designId, onBack }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (leftTab !== 'uploads') return;
+    setUploadsLoading(true);
+    api.listAssets().then(setUploads).catch(() => setUploads([])).finally(() => setUploadsLoading(false));
+  }, [leftTab]);
+
+  function addUploadedImageToCanvas(asset) {
+    fabric.FabricImage.fromURL(asset.url, { crossOrigin: 'anonymous' }).then((img) => {
+      img.set({ id: newId(), left: 80, top: 80, scaleX: 220 / img.width, scaleY: 220 / img.height });
+      const canvas = fabricRef.current;
+      canvas.add(img); canvas.setActiveObject(img); setSelected(snapshotObject(img));
+    });
+  }
+
+  async function handleDeleteUpload(e, asset) {
+    e.stopPropagation();
+    if (!confirm(`Remove "${asset.name}" from your uploads? This won't affect designs that already use it.`)) return;
+    await api.deleteAsset(asset.key);
+    setUploads((u) => u.filter((a) => a.key !== asset.key));
+  }
+
   function snapshotObject(obj) {
     return {
       id: obj.id,
@@ -183,6 +239,7 @@ export default function EditorPage({ designId, onBack }) {
       textAlign: obj.textAlign,
       text: obj.text,
       opacity: obj.opacity,
+      cornerRadius: obj.type === 'rect' ? (obj.rx || 0) : (obj.type === 'image' && obj.clipPath ? Math.round((obj.clipPath.rx || 0) * (obj.scaleX || 1)) : 0),
       fillcraftField: obj.fillcraftField || null,
     };
   }
@@ -192,7 +249,6 @@ export default function EditorPage({ designId, onBack }) {
     if (obj) setSelected(snapshotObject(obj));
   }
 
-  // ---- Undo / redo ----
   function undo() {
     const h = historyRef.current;
     if (h.index <= 0) return;
@@ -214,13 +270,10 @@ export default function EditorPage({ designId, onBack }) {
     setSelected(null);
   }
 
-  // ---- Toolbar: add objects ----
   function addText() {
     const canvas = fabricRef.current;
     const t = new fabric.Textbox('New text', { id: newId(), left: 60, top: 60, width: 260, fontSize: 28, fontFamily: 'Inter', fill: '#111111', fontWeight: 'normal' });
-    canvas.add(t);
-    canvas.setActiveObject(t);
-    setSelected(snapshotObject(t));
+    canvas.add(t); canvas.setActiveObject(t); setSelected(snapshotObject(t));
   }
   function addRect() {
     const canvas = fabricRef.current;
@@ -259,6 +312,7 @@ export default function EditorPage({ designId, onBack }) {
       img.set({ id: newId(), left: 80, top: 80, scaleX: 220 / img.width, scaleY: 220 / img.height });
       const canvas = fabricRef.current;
       canvas.add(img); canvas.setActiveObject(img); setSelected(snapshotObject(img));
+      if (leftTab === 'uploads') api.listAssets().then(setUploads).catch(() => {});
     } catch (err) {
       setError(`Image upload failed: ${err.message}`);
     }
@@ -311,11 +365,8 @@ export default function EditorPage({ designId, onBack }) {
     const canvas = fabricRef.current;
     const obj = canvas.getActiveObject();
     if (!obj) return;
-    if (obj.type === 'activeselection') {
-      obj.getObjects().forEach((o) => canvas.remove(o));
-    } else {
-      canvas.remove(obj);
-    }
+    if (obj.type === 'activeselection') obj.getObjects().forEach((o) => canvas.remove(o));
+    else canvas.remove(obj);
     canvas.discardActiveObject();
     setSelected(null);
   }
@@ -332,7 +383,23 @@ export default function EditorPage({ designId, onBack }) {
     });
   }
 
-  // ---- Property panel edits ----
+  function applyCornerRadius(radius) {
+    const canvas = fabricRef.current;
+    const obj = canvas.getActiveObject();
+    if (!obj) return;
+    if (obj.type === 'rect') {
+      obj.set({ rx: radius, ry: radius });
+    } else if (obj.type === 'image') {
+      obj.clipPath = radius > 0 ? new fabric.Rect({
+        width: obj.width, height: obj.height,
+        rx: radius / (obj.scaleX || 1), ry: radius / (obj.scaleY || 1),
+        originX: 'center', originY: 'center',
+      }) : null;
+    }
+    canvas.requestRenderAll();
+    refreshSelectedSnapshot();
+  }
+
   function applyToSelected(props) {
     const canvas = fabricRef.current;
     const obj = canvas.getActiveObject();
@@ -445,20 +512,16 @@ export default function EditorPage({ designId, onBack }) {
     setCanvasBg(color);
     const canvas = fabricRef.current;
     const bgObj = canvas?.getObjects().find((o) => o.id === 'background');
-    if (bgObj) {
-      bgObj.set({ fill: color });
-      canvas.requestRenderAll();
-    }
+    if (bgObj) { bgObj.set({ fill: color }); canvas.requestRenderAll(); }
   }
 
-  // ---- Save ----
   const saveDesign = useCallback(async () => {
     const canvas = fabricRef.current;
     if (!canvas) return;
     setSaving(true);
     setError('');
     try {
-      const json = canvas.toJSON(['id', 'fillcraftField']);
+      const json = canvas.toObject(['id', 'fillcraftField']);
       const updated = await api.updateDesign(designId, { canvas_json: json });
       setDesign(updated);
     } catch (err) {
@@ -468,7 +531,6 @@ export default function EditorPage({ designId, onBack }) {
     }
   }, [designId]);
 
-  // ---- Preview ----
   async function openPreview() {
     await saveDesign();
     const fresh = await api.getDesign(designId);
@@ -502,35 +564,91 @@ export default function EditorPage({ designId, onBack }) {
   const displayH = (design?.height || 0) * effectiveScale;
   const isTextSelected = selected && (selected.type === 'textbox' || selected.type === 'text' || selected.type === 'i-text');
   const isGroupSelected = selected && selected.type === 'group';
+  const isBackground = selected?.id === 'background';
 
   return (
     <div className="editor-page">
-      <div className="editor-toolbar">
+      <div className="editor-topbar">
         <button className="ghost-btn" onClick={onBack}>← Back</button>
         <span className="toolbar-sep" />
-        <button onClick={addText} disabled={!design}>+ Text</button>
-        <button onClick={addRect} disabled={!design}>▭</button>
-        <button onClick={addCircle} disabled={!design}>◯</button>
-        <button onClick={addTriangle} disabled={!design}>△</button>
-        <button onClick={addLine} disabled={!design}>╱</button>
-        <button onClick={addStar} disabled={!design}>★</button>
-        <button onClick={() => setIconPickerOpen(true)} disabled={!design}>+ Icon</button>
-        <label className="ghost-btn" style={{ cursor: design ? 'pointer' : 'default', opacity: design ? 1 : 0.5 }}>
-          + Image
-          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={addImage} disabled={!design} />
-        </label>
-        <label className="ghost-btn" style={{ cursor: design ? 'pointer' : 'default', opacity: design ? 1 : 0.5 }}>
-          Import SVG
-          <input type="file" accept=".svg,image/svg+xml" style={{ display: 'none' }} onChange={importSvg} disabled={!design} />
-        </label>
-        <span className="toolbar-sep" />
-        <button className="ghost-btn" onClick={undo} disabled={!design} title="Undo (Ctrl+Z)">↶</button>
-        <button className="ghost-btn" onClick={redo} disabled={!design} title="Redo (Ctrl+Shift+Z)">↷</button>
-        <span className="toolbar-sep" />
-        <button className="ghost-btn" onClick={() => setZoom((z) => Math.max(0.25, z - 0.1))}>−</button>
-        <span className="zoom-label">{Math.round(zoom * 100)}%</span>
-        <button className="ghost-btn" onClick={() => setZoom((z) => Math.min(3, z + 0.1))}>+</button>
-        <button className="ghost-btn" onClick={() => setZoom(1)}>Fit</button>
+
+        {selected && !multiSelected && (
+          <div className="context-bar">
+            {isTextSelected && (
+              <>
+                <input
+                  className="context-font-input"
+                  list="google-fonts-list"
+                  value={selected.fontFamily || 'Inter'}
+                  onChange={(e) => { loadGoogleFontInBrowser(e.target.value); applyToSelected({ fontFamily: e.target.value }); }}
+                />
+                <datalist id="google-fonts-list">
+                  {GOOGLE_FONTS_QUICKLIST.map((f) => <option key={f} value={f} />)}
+                </datalist>
+                <input type="number" className="context-num" value={selected.fontSize || 24} onChange={(e) => applyToSelected({ fontSize: Number(e.target.value) })} />
+                <button className={`ctx-icon-btn ${selected.fontWeight === 'bold' ? 'active' : ''}`} onClick={() => applyToSelected({ fontWeight: selected.fontWeight === 'bold' ? 'normal' : 'bold' })} title="Bold"><b>B</b></button>
+                <button className={`ctx-icon-btn ${selected.fontStyle === 'italic' ? 'active' : ''}`} onClick={() => applyToSelected({ fontStyle: selected.fontStyle === 'italic' ? 'normal' : 'italic' })} title="Italic"><i>I</i></button>
+                <select value={selected.textAlign || 'left'} onChange={(e) => applyToSelected({ textAlign: e.target.value })}>
+                  <option value="left">⇤</option>
+                  <option value="center">↔</option>
+                  <option value="right">⇥</option>
+                </select>
+                <input type="color" value={selected.fill || '#111111'} onChange={(e) => applyToSelected({ fill: e.target.value })} title="Text color" />
+              </>
+            )}
+
+            {!isTextSelected && !isBackground && selected.type !== 'image' && selected.type !== 'group' && (
+              <input type="color" value={selected.fill || '#D9A441'} onChange={(e) => applyToSelected({ fill: e.target.value })} title="Fill color" />
+            )}
+            {isBackground && (
+              <input type="color" value={canvasBg} onChange={(e) => updateCanvasBackground(e.target.value)} title="Canvas background color" />
+            )}
+
+            {(selected.type === 'rect' || selected.type === 'circle' || selected.type === 'triangle' || selected.type === 'line') && (
+              <>
+                <input type="color" value={selected.stroke || '#000000'} onChange={(e) => applyToSelected({ stroke: e.target.value })} title="Stroke color" />
+                <input type="number" className="context-num" value={selected.strokeWidth || 0} onChange={(e) => applyToSelected({ strokeWidth: Number(e.target.value) })} title="Stroke width" />
+              </>
+            )}
+
+            {(selected.type === 'rect' || selected.type === 'image') && (
+              <span className="ctx-slider-group" title="Corner radius">
+                ⌐<input type="range" min="0" max={Math.round(Math.min(selected.width, selected.height) / 2)} value={selected.cornerRadius || 0} onChange={(e) => applyCornerRadius(Number(e.target.value))} />
+              </span>
+            )}
+
+            <span className="ctx-slider-group" title="Opacity">
+              ◐<input type="range" min="0" max="1" step="0.05" value={selected.opacity ?? 1} onChange={(e) => applyToSelected({ opacity: Number(e.target.value) })} />
+            </span>
+
+            <span className="toolbar-sep" />
+            <div className="align-row compact">
+              <button onClick={() => alignSelected('left')} title="Align left">⇤</button>
+              <button onClick={() => alignSelected('center-h')} title="Center horizontally">↔</button>
+              <button onClick={() => alignSelected('right')} title="Align right">⇥</button>
+              <button onClick={() => alignSelected('top')} title="Align top">⤒</button>
+              <button onClick={() => alignSelected('center-v')} title="Center vertically">↕</button>
+              <button onClick={() => alignSelected('bottom')} title="Align bottom">⤓</button>
+            </div>
+            <div className="align-row compact">
+              <button onClick={() => layerAction('back')} title="Send to back">⇊</button>
+              <button onClick={() => layerAction('backward')} title="Send backward">↓</button>
+              <button onClick={() => layerAction('forward')} title="Bring forward">↑</button>
+              <button onClick={() => layerAction('front')} title="Bring to front">⇈</button>
+            </div>
+            <span className="toolbar-sep" />
+            <button className="ctx-icon-btn" onClick={duplicateSelected} title="Duplicate (Ctrl+D)">⧉</button>
+            {!isBackground && <button className="ctx-icon-btn danger" onClick={deleteSelected} title="Delete">🗑</button>}
+          </div>
+        )}
+
+        {multiSelected && (
+          <div className="context-bar">
+            <button className="ghost-btn" onClick={groupSelected}>Group</button>
+            <button className="ctx-icon-btn danger" onClick={deleteSelected} title="Delete selected">🗑</button>
+          </div>
+        )}
+
         <div style={{ flex: 1 }} />
         <button className="ghost-btn" onClick={saveDesign} disabled={saving || !design}>{saving ? 'Saving…' : 'Save'}</button>
         <button className="primary-btn" onClick={openPreview} disabled={!design}>Preview autofill</button>
@@ -540,6 +658,73 @@ export default function EditorPage({ designId, onBack }) {
       {error && <div className="error-text" style={{ padding: '8px 16px' }}>{error}</div>}
 
       <div className="editor-body">
+        <div className={`left-panel ${leftPanelOpen ? '' : 'collapsed'}`}>
+          <button className="left-panel-toggle" onClick={() => setLeftPanelOpen((v) => !v)} title={leftPanelOpen ? 'Collapse' : 'Expand'}>
+            {leftPanelOpen ? '‹' : '›'}
+          </button>
+          {leftPanelOpen && (
+            <>
+              <div className="left-panel-tabs">
+                <button className={leftTab === 'elements' ? 'active' : ''} onClick={() => setLeftTab('elements')}>Elements</button>
+                <button className={leftTab === 'uploads' ? 'active' : ''} onClick={() => setLeftTab('uploads')}>Uploads</button>
+              </div>
+
+              {leftTab === 'elements' && (
+                <div className="left-panel-content">
+                  <div className="left-section-title">Text</div>
+                  <button className="left-panel-item wide" onClick={addText} disabled={!design}>+ Add text box</button>
+
+                  <div className="left-section-title">Shapes &amp; lines</div>
+                  <div className="shape-grid">
+                    <button onClick={addRect} disabled={!design} title="Rectangle">▭</button>
+                    <button onClick={addCircle} disabled={!design} title="Circle">◯</button>
+                    <button onClick={addTriangle} disabled={!design} title="Triangle">△</button>
+                    <button onClick={addLine} disabled={!design} title="Line">╱</button>
+                    <button onClick={addStar} disabled={!design} title="Star">★</button>
+                    <button onClick={() => setIconPickerOpen(true)} disabled={!design} title="Icon">☺</button>
+                  </div>
+
+                  <div className="left-section-title">Media</div>
+                  <label className="left-panel-item wide" style={{ cursor: design ? 'pointer' : 'default', opacity: design ? 1 : 0.5 }}>
+                    + Upload image
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={addImage} disabled={!design} />
+                  </label>
+                  <label className="left-panel-item wide" style={{ cursor: design ? 'pointer' : 'default', opacity: design ? 1 : 0.5 }}>
+                    Import SVG
+                    <input type="file" accept=".svg,image/svg+xml" style={{ display: 'none' }} onChange={importSvg} disabled={!design} />
+                  </label>
+
+                  <div className="left-section-title">History</div>
+                  <div className="align-row">
+                    <button onClick={undo} disabled={!design} title="Undo (Ctrl+Z)">↶ Undo</button>
+                    <button onClick={redo} disabled={!design} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+                  </div>
+                </div>
+              )}
+
+              {leftTab === 'uploads' && (
+                <div className="left-panel-content">
+                  <label className="left-panel-item wide" style={{ cursor: design ? 'pointer' : 'default', opacity: design ? 1 : 0.5, marginBottom: 12 }}>
+                    + Upload new
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={addImage} disabled={!design} />
+                  </label>
+                  {uploadsLoading && <div className="hint-text">Loading…</div>}
+                  {!uploadsLoading && uploads.length === 0 && <div className="hint-text">Nothing uploaded yet.</div>}
+                  <div className="uploads-grid">
+                    {uploads.map((a) => (
+                      <div key={a.key} className="upload-item" onClick={() => addUploadedImageToCanvas(a)} title={a.name}>
+                        <img src={a.url} alt={a.name} />
+                        <span className="upload-item-menu" onClick={(e) => handleDeleteUpload(e, a)} title="Remove">⋯</span>
+                        <div className="upload-item-name">{a.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         <div className="canvas-viewport">
           <div className="canvas-stage" style={{ width: displayW || 400, height: displayH || 300, position: 'relative' }}>
             {!design && <div className="empty-state" style={{ position: 'absolute', inset: 0 }}>Loading design…</div>}
@@ -549,137 +734,71 @@ export default function EditorPage({ designId, onBack }) {
           </div>
         </div>
 
-        <div className="editor-sidebar">
-          {!selected && design && (
-            <>
-              <h4>Canvas</h4>
-              <div className="field">
-                <label>Background color</label>
-                <input type="color" value={canvasBg} onChange={(e) => updateCanvasBackground(e.target.value)} />
-              </div>
-              <div className="hint-text">{design.width} × {design.height}px — select an object to edit it, or mark it as an autofill field.</div>
-            </>
-          )}
+        {selected && !multiSelected && (
+          <div className="right-panel">
+            <h4>{selected.type}{isBackground ? ' (canvas background)' : ''}</h4>
+            <div className="field-row">
+              <div className="field"><label>X</label><input type="number" value={selected.left} onChange={(e) => applyBBox({ left: Number(e.target.value) })} /></div>
+              <div className="field"><label>Y</label><input type="number" value={selected.top} onChange={(e) => applyBBox({ top: Number(e.target.value) })} /></div>
+            </div>
+            <div className="field-row">
+              <div className="field"><label>W</label><input type="number" value={selected.width} onChange={(e) => applyBBox({ width: Number(e.target.value) })} /></div>
+              <div className="field"><label>H</label><input type="number" value={selected.height} onChange={(e) => applyBBox({ height: Number(e.target.value) })} /></div>
+            </div>
+            <div className="field">
+              <label>Rotation</label>
+              <input type="number" value={selected.angle} onChange={(e) => applyBBox({ angle: Number(e.target.value) })} />
+            </div>
 
-          {multiSelected && (
-            <>
-              <h4>Multiple objects</h4>
-              <button className="ghost-btn full" onClick={groupSelected}>Group</button>
-              <button className="ghost-btn full" onClick={deleteSelected}>🗑 Delete selected</button>
-            </>
-          )}
+            {isGroupSelected && <button className="ghost-btn full" onClick={ungroupSelected}>Ungroup</button>}
 
-          {selected && !multiSelected && (
-            <>
-              <h4>{selected.type}{selected.id === 'background' ? ' (canvas background)' : ''}</h4>
-
-              <div className="field-row">
-                <div className="field"><label>X</label><input type="number" value={selected.left} onChange={(e) => applyBBox({ left: Number(e.target.value) })} /></div>
-                <div className="field"><label>Y</label><input type="number" value={selected.top} onChange={(e) => applyBBox({ top: Number(e.target.value) })} /></div>
-              </div>
-              <div className="field-row">
-                <div className="field"><label>W</label><input type="number" value={selected.width} onChange={(e) => applyBBox({ width: Number(e.target.value) })} /></div>
-                <div className="field"><label>H</label><input type="number" value={selected.height} onChange={(e) => applyBBox({ height: Number(e.target.value) })} /></div>
-              </div>
-              <div className="field">
-                <label>Rotation</label>
-                <input type="number" value={selected.angle} onChange={(e) => applyBBox({ angle: Number(e.target.value) })} />
-              </div>
-
-              <div className="field">
-                <label>Align to canvas</label>
-                <div className="align-row">
-                  <button onClick={() => alignSelected('left')} title="Align left">⇤</button>
-                  <button onClick={() => alignSelected('center-h')} title="Center horizontally">↔</button>
-                  <button onClick={() => alignSelected('right')} title="Align right">⇥</button>
-                  <button onClick={() => alignSelected('top')} title="Align top">⤒</button>
-                  <button onClick={() => alignSelected('center-v')} title="Center vertically">↕</button>
-                  <button onClick={() => alignSelected('bottom')} title="Align bottom">⤓</button>
+            {!isBackground && (
+              <>
+                <hr />
+                <div className="field">
+                  <label><input type="checkbox" checked={!!selected.fillcraftField} onChange={(e) => toggleField(e.target.checked)} /> Autofill field</label>
                 </div>
-              </div>
-
-              <div className="field">
-                <label>Layer order</label>
-                <div className="align-row">
-                  <button onClick={() => layerAction('back')} title="Send to back">⇊</button>
-                  <button onClick={() => layerAction('backward')} title="Send backward">↓</button>
-                  <button onClick={() => layerAction('forward')} title="Bring forward">↑</button>
-                  <button onClick={() => layerAction('front')} title="Bring to front">⇈</button>
-                </div>
-              </div>
-
-              {isTextSelected && (
-                <>
-                  <div className="field">
-                    <label>Font family</label>
-                    <select value={selected.fontFamily || 'Inter'} onChange={(e) => applyToSelected({ fontFamily: e.target.value })}>
-                      {GOOGLE_FONTS_QUICKLIST.map((f) => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                  </div>
-                  <div className="field-row">
-                    <input type="number" value={selected.fontSize || 24} onChange={(e) => applyToSelected({ fontSize: Number(e.target.value) })} style={{ width: 70 }} />
-                    <select value={selected.fontWeight || 'normal'} onChange={(e) => applyToSelected({ fontWeight: e.target.value })}>
-                      <option value="normal">Normal</option>
-                      <option value="bold">Bold</option>
-                    </select>
-                    <select value={selected.textAlign || 'left'} onChange={(e) => applyToSelected({ textAlign: e.target.value })}>
-                      <option value="left">Left</option>
-                      <option value="center">Center</option>
-                      <option value="right">Right</option>
-                    </select>
-                  </div>
-                  <div className="field"><label>Text color</label><input type="color" value={selected.fill || '#111111'} onChange={(e) => applyToSelected({ fill: e.target.value })} /></div>
-                </>
-              )}
-
-              {!isTextSelected && selected.type !== 'image' && selected.type !== 'group' && (
-                <div className="field"><label>Fill color</label><input type="color" value={selected.fill || '#D9A441'} onChange={(e) => applyToSelected({ fill: e.target.value })} /></div>
-              )}
-
-              {(selected.type === 'rect' || selected.type === 'circle' || selected.type === 'triangle' || selected.type === 'line') && (
-                <div className="field-row">
-                  <div className="field"><label>Stroke</label><input type="color" value={selected.stroke || '#000000'} onChange={(e) => applyToSelected({ stroke: e.target.value })} /></div>
-                  <div className="field"><label>Width</label><input type="number" value={selected.strokeWidth || 0} onChange={(e) => applyToSelected({ strokeWidth: Number(e.target.value) })} style={{ width: 60 }} /></div>
-                </div>
-              )}
-
-              <div className="field">
-                <label>Opacity</label>
-                <input type="range" min="0" max="1" step="0.05" value={selected.opacity ?? 1} onChange={(e) => applyToSelected({ opacity: Number(e.target.value) })} />
-              </div>
-
-              <div className="field-row">
-                <button className="ghost-btn" onClick={duplicateSelected} title="Ctrl+D">⧉ Duplicate</button>
-                {isGroupSelected
-                  ? <button className="ghost-btn" onClick={ungroupSelected}>Ungroup</button>
-                  : selected.id !== 'background' && <button className="ghost-btn" onClick={deleteSelected} title="Delete">🗑 Delete</button>}
-              </div>
-
-              {selected.id !== 'background' && (
-                <>
-                  <hr />
-                  <div className="field">
-                    <label><input type="checkbox" checked={!!selected.fillcraftField} onChange={(e) => toggleField(e.target.checked)} /> Autofill field</label>
-                  </div>
-                  {selected.fillcraftField && (
-                    <>
+                {selected.fillcraftField && (
+                  <>
+                    <div className="field">
+                      <label>Field label (used by the n8n API)</label>
+                      <input type="text" value={selected.fillcraftField.label} onChange={(e) => updateFieldMeta({ label: e.target.value })} />
+                    </div>
+                    {selected.fillcraftField.field_type === 'text' && (
                       <div className="field">
-                        <label>Field label (used by the n8n API)</label>
-                        <input type="text" value={selected.fillcraftField.label} onChange={(e) => updateFieldMeta({ label: e.target.value })} />
+                        <label>Max characters</label>
+                        <input type="number" value={selected.fillcraftField.max_characters || 200} onChange={(e) => updateFieldMeta({ max_characters: Number(e.target.value) })} />
                       </div>
-                      {selected.fillcraftField.field_type === 'text' && (
-                        <div className="field">
-                          <label>Max characters</label>
-                          <input type="number" value={selected.fillcraftField.max_characters || 200} onChange={(e) => updateFieldMeta({ max_characters: Number(e.target.value) })} />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {!selected && design && (
+          <div className="right-panel">
+            <h4>Canvas</h4>
+            <div className="field">
+              <label>Background color</label>
+              <input type="color" value={canvasBg} onChange={(e) => updateCanvasBackground(e.target.value)} />
+            </div>
+            <div className="hint-text">{design.width} × {design.height}px — select an object to edit it, or mark it as an autofill field.</div>
+          </div>
+        )}
+      </div>
+
+      <div className="editor-bottombar">
+        <button className="ghost-btn" onClick={() => setZoom((z) => Math.max(0.25, z - 0.1))}>−</button>
+        <input
+          type="range" min="0.25" max="3" step="0.01" value={zoom}
+          onChange={(e) => setZoom(Number(e.target.value))}
+          className="zoom-slider"
+        />
+        <button className="ghost-btn" onClick={() => setZoom((z) => Math.min(3, z + 0.1))}>+</button>
+        <span className="zoom-label">{Math.round(zoom * 100)}%</span>
+        <button className="ghost-btn" onClick={() => setZoom(1)}>Fit</button>
       </div>
 
       {iconPickerOpen && (
@@ -727,18 +846,4 @@ export default function EditorPage({ designId, onBack }) {
       )}
     </div>
   );
-}
-
-function starPoints(spikes, outerR, innerR) {
-  const pts = [];
-  const step = Math.PI / spikes;
-  let rot = -Math.PI / 2;
-  const cx = outerR, cy = outerR;
-  for (let i = 0; i < spikes; i++) {
-    pts.push({ x: cx + Math.cos(rot) * outerR, y: cy + Math.sin(rot) * outerR });
-    rot += step;
-    pts.push({ x: cx + Math.cos(rot) * innerR, y: cy + Math.sin(rot) * innerR });
-    rot += step;
-  }
-  return pts;
 }
