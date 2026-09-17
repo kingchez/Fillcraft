@@ -10,7 +10,7 @@ export default async function imagesRoutes(app) {
       image_url,
       canvas_size = 1200,
       background_color = '#FFFFFF',
-      max_content_ratio = 0.95,
+      max_content_ratio = 0.83,
       strip_size_suffix = true,
     } = req.body || {};
 
