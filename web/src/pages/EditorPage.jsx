@@ -97,14 +97,24 @@ export default function EditorPage({ designId, onBack }) {
       const d = await api.getDesign(designId);
       if (cancelled) return;
       setDesign(d);
-      setBaseScale(Math.min(DISPLAY_MAX_WIDTH / d.width, 1));
+      const initialScale = Math.min(DISPLAY_MAX_WIDTH / d.width, 1);
+      setBaseScale(initialScale);
 
+      // The canvas element is created at the scaled-down DISPLAY size, not
+      // the full design size — Fabric's own zoom then draws design-space
+      // objects (whose left/top/width/height stay in design units) shrunk
+      // to fit. Deliberately not using a CSS transform:scale() wrapper:
+      // that leaves the canvas's backing store at full design size while
+      // only the DOM box is visually scaled, and breaks Fabric's own
+      // pointer-to-canvas coordinate math for dragging/selecting, since
+      // Fabric assumes a 1:1 CSS-pixel mapping via getBoundingClientRect().
       const canvas = new fabric.Canvas(canvasElRef.current, {
-        width: d.width,
-        height: d.height,
+        width: Math.round(d.width * initialScale),
+        height: Math.round(d.height * initialScale),
         backgroundColor: '#FFFFFF',
         preserveObjectStacking: true,
       });
+      canvas.setZoom(initialScale);
       fabricRef.current = canvas;
 
       canvas.on('mouse:down', (opt) => {
@@ -164,6 +174,20 @@ export default function EditorPage({ designId, onBack }) {
       fabricRef.current = null;
     };
   }, [designId]);
+
+  // Keeps the canvas's actual DOM size and Fabric's own zoom in sync with
+  // baseScale/zoom after the initial mount (the +/-/Fit controls).
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !design) return;
+    const scale = baseScale * zoom;
+    canvas.setDimensions({
+      width: Math.round(design.width * scale),
+      height: Math.round(design.height * scale),
+    });
+    canvas.setZoom(scale);
+    canvas.requestRenderAll();
+  }, [zoom, baseScale, design?.id]);
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -728,9 +752,7 @@ export default function EditorPage({ designId, onBack }) {
         <div className="canvas-viewport">
           <div className="canvas-stage" style={{ width: displayW || 400, height: displayH || 300, position: 'relative' }}>
             {!design && <div className="empty-state" style={{ position: 'absolute', inset: 0 }}>Loading design…</div>}
-            <div style={{ width: design?.width || 0, height: design?.height || 0, overflow: 'hidden', transform: `scale(${effectiveScale})`, transformOrigin: 'top left' }}>
-              <canvas ref={canvasElRef} />
-            </div>
+            <canvas ref={canvasElRef} />
           </div>
         </div>
 
