@@ -12,12 +12,6 @@ const BUCKET = 'fillcraft-assets';
 export async function storeAsset(buffer, filename, contentType) {
   const safeName = (filename || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
   const key = `${randomUUID()}-${safeName}`;
-  const localDir = getLocalUploadsDir();
-  const localPath = path.join(localDir, key);
-
-  // Always write local mirror first — cheap, and guarantees we have a copy
-  // even if the Supabase upload fails partway through.
-  fs.writeFileSync(localPath, buffer);
 
   if (sbAvailable()) {
     try {
@@ -29,12 +23,19 @@ export async function storeAsset(buffer, filename, contentType) {
         const { data } = sb.storage.from(BUCKET).getPublicUrl(key);
         return { url: data.publicUrl, local_path: key, local_url: `/uploads/${key}` };
       }
-      console.error('[storage] Supabase upload failed, using local URL:', error.message);
+      console.error('[storage] Supabase upload failed, falling back to local disk:', error.message);
     } catch (err) {
-      console.error('[storage] Supabase upload threw, using local URL:', err.message);
+      console.error('[storage] Supabase upload threw, falling back to local disk:', err.message);
     }
   }
 
+  // Local disk is a genuine fallback now — only written when Supabase is
+  // unavailable or the upload to it failed, not on every single upload.
+  // Writing unconditionally here was the real cause of files accumulating
+  // on the VPS disk forever, independent of what happened in Supabase.
+  const localDir = getLocalUploadsDir();
+  const localPath = path.join(localDir, key);
+  fs.writeFileSync(localPath, buffer);
   return { url: `/uploads/${key}`, local_path: key, local_url: `/uploads/${key}` };
 }
 

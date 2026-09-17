@@ -136,12 +136,52 @@ export async function updateDesign(id, patch) {
   return attachCategoriesAndFields(data);
 }
 
+// Collects every asset URL a design actually references — the thumbnail,
+// plus every image/clipPath-bearing object's src, at any nesting depth
+// (groups can contain images too). Used by deleteDesign to actually clean
+// up storage instead of leaving every photo a design ever used as a
+// permanent orphan.
+function collectAssetUrls(design) {
+  const urls = new Set();
+  if (design.thumbnail_url) urls.add(design.thumbnail_url);
+  const walk = (objects) => {
+    for (const obj of objects || []) {
+      if (obj.src) urls.add(obj.src);
+      if (obj.type === 'group' && Array.isArray(obj.objects)) walk(obj.objects);
+    }
+  };
+  walk(design.canvas_json?.objects);
+  return [...urls];
+}
+
 export async function deleteDesign(id) {
   assertSupabase();
   const existing = await getDesign(id);
+  if (!existing) {
+    const { error } = await supabase.from('fillcraft_designs').delete().eq('id', id);
+    if (error) throw error;
+    return;
+  }
+  const candidateUrls = collectAssetUrls(existing);
+
   const { error } = await supabase.from('fillcraft_designs').delete().eq('id', id);
   if (error) throw error;
-  if (existing?.thumbnail_url) await deleteAsset(existing.thumbnail_url);
+
+  if (candidateUrls.length) {
+    // Uploads can be reused across designs (the Uploads panel exists for
+    // exactly that) — only actually delete an asset if no other remaining
+    // design still references it, so deleting one design can't silently
+    // break an image inside a different one.
+    const { data: others } = await supabase.from('fillcraft_designs').select('thumbnail_url, canvas_json');
+    const stillUsed = new Set();
+    for (const d of others || []) {
+      for (const url of collectAssetUrls(d)) stillUsed.add(url);
+    }
+    for (const url of candidateUrls) {
+      if (stillUsed.has(url)) continue;
+      await deleteAsset(url).catch((err) => console.error(`[designsStore] failed to delete asset ${url}:`, err.message));
+    }
+  }
 }
 
 // Walks canvas_json.objects (one level — Fabric groups aren't recursed into
