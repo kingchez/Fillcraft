@@ -316,7 +316,16 @@ body {
      For a canvas you're meant to be able to see and scroll to every edge
      of, margin-based centering below doesn't have that failure mode. */
 }
-.canvas-stage { position: relative; margin: 0 auto; background: #0A0812; user-select: none; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-soft); }
+.canvas-stage {
+  position: relative; margin: 0 auto; background: #0A0812; user-select: none; box-shadow: var(--shadow-soft);
+  /* NOT border-radius/overflow:hidden — a design canvas is a rectangle;
+     rounding and clipping its corners was cutting the four corners off
+     your actual design and letting this dark wrapper background show
+     through underneath, which is exactly the "darker purple area not
+     getting filled" — the fixed 8px radius ate a bigger visible fraction
+     of the canvas the more zoomed-out you were, matching what you saw
+     get worse on Fit. */
+}
 .canvas-stage img { display: block; user-select: none; pointer-events: none; }
 
 .field-row { display: flex; gap: 8px; margin-bottom: 14px; }

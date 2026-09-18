@@ -696,8 +696,14 @@ export default function EditorPage({ designId, onBack }) {
   }
 
   const effectiveScale = baseScale * zoom;
-  const displayW = (design?.width || 0) * effectiveScale;
-  const displayH = (design?.height || 0) * effectiveScale;
+  // Rounded the same way canvas.setDimensions() rounds the real canvas
+  // backing store (see the zoom-sync effect above) — any mismatch between
+  // this wrapper's CSS size and the canvas's actual pixel size leaves a
+  // hairline gap on an edge where the wrapper's dark background shows
+  // through, which is its own small version of the same "edges don't line
+  // up" problem as the border-radius issue fixed alongside this.
+  const displayW = Math.round((design?.width || 0) * effectiveScale);
+  const displayH = Math.round((design?.height || 0) * effectiveScale);
   const isTextSelected = selected && (selected.type === 'textbox' || selected.type === 'text' || selected.type === 'i-text');
   const isGroupSelected = selected && selected.type === 'group';
   const isBackground = selected?.id === 'background';
