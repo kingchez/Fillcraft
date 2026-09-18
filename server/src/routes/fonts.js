@@ -5,6 +5,7 @@ import { listCustomFonts, createCustomFont } from '../services/designsStore.js';
 import { storeAsset } from '../services/storage.js';
 import { registerFont } from '../render/imageUtils.js';
 import { markFontRegistered } from '../services/fontRegistry.js';
+import { getFontCacheDir } from '../services/fontCache.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const googleFontsList = JSON.parse(
@@ -47,10 +48,14 @@ export default async function fontsRoutes(app) {
     const asset = await storeAsset(fileBuffer, filename, mimetype || 'font/ttf');
     const font = await createCustomFont({ family_name: familyName, file_url: asset.url });
 
-    // Register immediately so it's usable without a restart.
+    // The renderer's font engine needs a real file on disk to register a
+    // font — we already have the bytes in memory from the upload, so write
+    // them straight to the ephemeral tmp cache (not persistent storage;
+    // see fontCache.js) rather than re-downloading from Supabase.
     try {
-      const dir = process.env.LOCAL_UPLOADS_DIR || path.join(process.cwd(), 'data', 'uploads');
-      registerFont(path.join(dir, asset.local_path), familyName);
+      const cachePath = path.join(getFontCacheDir(), asset.local_path);
+      fs.writeFileSync(cachePath, fileBuffer);
+      registerFont(cachePath, familyName);
       markFontRegistered(familyName);
     } catch (err) {
       req.log.warn(`font registration failed for ${familyName}: ${err.message}`);

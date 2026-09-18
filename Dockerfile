@@ -27,9 +27,13 @@ COPY --from=web-build /app/web/dist ./web/dist
 
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV LOCAL_DATA_DIR=/app/data
 
-VOLUME ["/app/data"]
+# No VOLUME here on purpose — this app has no persistent local disk at all.
+# Every user-owned asset (designs, uploads, custom fonts) lives in Supabase
+# only. The only thing written to disk at runtime is an ephemeral font
+# cache under the OS temp dir (see server/src/services/fontCache.js),
+# which is fine to lose on every restart/redeploy and is never meant to
+# persist across them.
 EXPOSE 3000
 
 WORKDIR /app/server

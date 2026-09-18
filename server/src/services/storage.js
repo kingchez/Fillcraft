@@ -1,68 +1,39 @@
-import fs from 'fs';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import { supabase as sb, supabaseAvailable as sbAvailable } from '../db/supabase.js';
-import { getLocalUploadsDir } from './localFiles.js';
 
 const BUCKET = 'fillcraft-assets';
 
-// Stores an asset (template image or font file) in Supabase Storage (if configured)
-// AND mirrors it to local disk, so template assets survive a Supabase outage the
-// same way template metadata does.
+// Supabase Storage is the ONLY place assets are ever written. No local-disk
+// fallback or mirror of any kind — if Supabase isn't configured or the
+// upload fails, this throws instead of silently degrading to disk. That's
+// intentional: a fallback that quietly writes to the VPS disk is exactly
+// the kind of "second storage option" that caused permanent accumulation
+// before, and the whole point of this pass is that nothing lives on disk.
 export async function storeAsset(buffer, filename, contentType) {
+  if (!sbAvailable()) {
+    throw new Error('Supabase Storage is not configured — set SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY. There is no local-disk fallback.');
+  }
   const safeName = (filename || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
   const key = `${randomUUID()}-${safeName}`;
 
-  if (sbAvailable()) {
-    try {
-      const { error } = await sb.storage.from(BUCKET).upload(key, buffer, {
-        contentType: contentType || 'application/octet-stream',
-        upsert: true,
-      });
-      if (!error) {
-        const { data } = sb.storage.from(BUCKET).getPublicUrl(key);
-        return { url: data.publicUrl, local_path: key, local_url: `/uploads/${key}` };
-      }
-      console.error('[storage] Supabase upload failed, falling back to local disk:', error.message);
-    } catch (err) {
-      console.error('[storage] Supabase upload threw, falling back to local disk:', err.message);
-    }
-  }
+  const { error } = await sb.storage.from(BUCKET).upload(key, buffer, {
+    contentType: contentType || 'application/octet-stream',
+    upsert: true,
+  });
+  if (error) throw new Error(`Supabase upload failed: ${error.message}`);
 
-  // Local disk is a genuine fallback now — only written when Supabase is
-  // unavailable or the upload to it failed, not on every single upload.
-  // Writing unconditionally here was the real cause of files accumulating
-  // on the VPS disk forever, independent of what happened in Supabase.
-  const localDir = getLocalUploadsDir();
-  const localPath = path.join(localDir, key);
-  fs.writeFileSync(localPath, buffer);
-  return { url: `/uploads/${key}`, local_path: key, local_url: `/uploads/${key}` };
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(key);
+  return { url: data.publicUrl, local_path: key };
 }
 
-// Deletes an asset by its stored URL — from Supabase Storage (if configured)
-// and from the local disk mirror. Used when a template (or anything
-// referencing a stored file) is deleted, so files don't accumulate as
-// orphans once their owning record is gone.
+// Deletes an asset by its stored URL — Supabase Storage only.
 export async function deleteAsset(url) {
   if (!url || !url.includes('/')) return;
   const key = url.split('/').pop().split('?')[0];
-  if (!key) return;
+  if (!key || !sbAvailable()) return;
 
-  if (sbAvailable()) {
-    try {
-      const { error } = await sb.storage.from(BUCKET).remove([key]);
-      if (error) console.error('[storage] Supabase delete failed:', error.message);
-    } catch (err) {
-      console.error('[storage] Supabase delete threw:', err.message);
-    }
-  }
-
-  try {
-    const localPath = path.join(getLocalUploadsDir(), key);
-    if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
-  } catch (err) {
-    console.error('[storage] local delete failed:', err.message);
-  }
+  const { error } = await sb.storage.from(BUCKET).remove([key]);
+  if (error) console.error('[storage] Supabase delete failed:', error.message);
 }
 
 // Lists everything in the bucket for the editor's "Uploads" panel — assets
@@ -88,27 +59,14 @@ export async function listAssets({ limit = 200 } = {}) {
 }
 
 export async function deleteAssetByKey(key) {
-  if (!key) return;
-  if (sbAvailable()) {
-    const { error } = await sb.storage.from(BUCKET).remove([key]);
-    if (error) console.error('[storage] delete by key failed:', error.message);
-  }
-  try {
-    const localPath = path.join(getLocalUploadsDir(), key);
-    if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
-  } catch (err) {
-    console.error('[storage] local delete by key failed:', err.message);
-  }
+  if (!key || !sbAvailable()) return;
+  const { error } = await sb.storage.from(BUCKET).remove([key]);
+  if (error) console.error('[storage] delete by key failed:', error.message);
 }
 
-// Converts a "/uploads/<key>" web path (our own local-mirror URL scheme)
-// back into a real filesystem path so the canvas renderer can load it
-// directly. Absolute http(s) URLs and data URIs pass through unchanged.
+// Every stored asset is now a real Supabase public URL, so there is no
+// "/uploads/<key>" local scheme left to resolve — sources pass through
+// unchanged (the renderer fetches http(s) URLs directly).
 export function resolveAssetSource(source) {
-  if (!source) return source;
-  if (source.startsWith('/uploads/')) {
-    const key = source.slice('/uploads/'.length);
-    return path.join(getLocalUploadsDir(), key);
-  }
   return source;
 }

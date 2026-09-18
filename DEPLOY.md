@@ -22,7 +22,6 @@ In Dokploy's Environment tab for the app, set:
 SUPABASE_URL=https://<your-project>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<your service role key>
 FILLCRAFT_API_KEY=<generate a long random string>
-LOCAL_DATA_DIR=/app/data
 ```
 
 Generate `FILLCRAFT_API_KEY` with something like:
@@ -33,13 +32,9 @@ This is the value you'll put in n8n's HTTP Request node header (`x-api-key`) whe
 
 Leave `CANVA_CLIENT_ID` / `CANVA_CLIENT_SECRET` / `CANVA_REDIRECT_URI` unset for now until you set up a Canva Developer app.
 
-## 4. Persistent volume (important)
+## 4. No volume mount needed
 
-Add a **Volume Mount** in Dokploy:
-- Host path (or Dokploy-managed volume): anything persistent, e.g. `fillcraft-data`
-- Container path: `/app/data`
-
-This is where the local SQLite backup and the local-mirrored template/font files live. Without this, a redeploy wipes your local failover copy (Supabase data would be untouched, but you'd lose the "survive a Supabase outage" safety net until it re-syncs).
+Fillcraft has no persistent local disk at all — don't add a Volume Mount in Dokploy for this app. Every design, upload, and custom font lives only in Supabase (database + the `fillcraft-assets` bucket). The only thing the container ever writes to disk is a small ephemeral font-rendering cache under the OS temp dir, which is fine to lose on every restart or redeploy by design. If you previously had a `fillcraft-data` volume attached from an earlier version of this app, it's safe to remove it in Dokploy — nothing reads from or writes to it anymore.
 
 ## 5. Domain + deploy
 
@@ -66,8 +61,8 @@ You get the `template_id` from the admin UI (or `GET /api/templates` to list all
 
 ## 8. Redeploys going forward
 
-Any time you push to `main`, trigger a redeploy in Dokploy (or set up its auto-deploy-on-push webhook). Since template data lives in Supabase + the mounted volume — not in the git repo — redeploying never touches your templates. That's the whole point of the architecture we discussed: code ships via git, template content doesn't.
+Any time you push to `main`, trigger a redeploy in Dokploy (or set up its auto-deploy-on-push webhook). Since all design/template data lives in Supabase only — not in the git repo and not on any mounted volume — redeploying never touches your content at all. Code ships via git, content doesn't.
 
 ---
 
-**If something doesn't come up:** check Dokploy's build logs first (most likely culprit is a missing env var causing a crash-on-boot — the server does start even without Supabase configured, so if it's failing to boot at all, check `PORT`/volume mount issues first).
+**If something doesn't come up:** check Dokploy's build logs first. A missing `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` won't crash the server at boot, but any upload or design-render call will fail immediately with a clear "Supabase Storage is not configured" error — check the app logs for that if uploads are failing.

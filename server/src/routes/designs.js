@@ -3,7 +3,6 @@ import {
 } from '../services/designsStore.js';
 import { renderDesign } from '../render/designRenderer.js';
 import { ensureFontsForDesign } from '../services/fontRegistry.js';
-import { getLocalUploadsDir } from '../services/localFiles.js';
 import { storeAsset, listAssets, deleteAssetByKey } from '../services/storage.js';
 import { createCanvas } from '@napi-rs/canvas';
 

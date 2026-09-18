@@ -5,9 +5,4 @@ services:
       - "3000:3000"
     env_file:
       - .env
-    volumes:
-      - fillcraft-data:/app/data
     restart: unless-stopped
-
-volumes:
-  fillcraft-data:

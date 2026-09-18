@@ -14,7 +14,6 @@ import utilsRoutes from './routes/utils.js';
 import canvaRoutes from './routes/canva.js';
 
 import { registerAllCustomFonts } from './services/fontRegistry.js';
-import { getLocalUploadsDir } from './services/localFiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,8 +38,8 @@ await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
 
 // Registering custom fonts touches Supabase at startup. If Supabase is slow
 // or briefly unreachable, this must never block the server from listening —
-// that would turn a Supabase blip into total downtime, defeating the whole
-// point of having a local fallback. Bounded with a timeout and never fatal.
+// worst case, custom fonts fall back to a default font until the next
+// render succeeds in fetching them. Bounded with a timeout and never fatal.
 async function withTimeout(promise, ms, label) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -78,19 +77,11 @@ await app.register(fastifyStatic, {
   wildcard: false,
 });
 
-// Serve locally-mirrored uploads (fallback asset URLs when Supabase Storage
-// isn't configured, or as a secondary source either way). decorateReply must
-// be false here since the webDist registration above already added it.
-await app.register(fastifyStatic, {
-  root: getLocalUploadsDir(),
-  prefix: '/uploads/',
-  decorateReply: false,
-});
-
-// Serve the built admin frontend (web/dist) for everything else.
+// There is no /uploads static mount anymore — every asset is a real
+// Supabase Storage public URL now, so there's nothing local left to serve.
 
 app.setNotFoundHandler((req, reply) => {
-  if (req.raw.url?.startsWith('/api/') || req.raw.url?.startsWith('/uploads/')) {
+  if (req.raw.url?.startsWith('/api/')) {
     return reply.code(404).send({ error: 'not_found' });
   }
   return reply.sendFile('index.html', webDist);

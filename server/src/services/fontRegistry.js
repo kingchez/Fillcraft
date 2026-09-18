@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { getLocalUploadsDir } from './localFiles.js';
+import { getFontCacheDir } from './fontCache.js';
 import { registerFont } from '../render/imageUtils.js';
 import { listCustomFonts } from './designsStore.js';
 
@@ -33,7 +33,7 @@ export async function ensureGoogleFontRegistered(family) {
     const urls = [...css.matchAll(/url\((https:\/\/fonts\.gstatic\.com[^)]+)\)/g)].map((m) => m[1]);
     if (!urls.length) return;
 
-    const dir = getLocalUploadsDir();
+    const dir = getFontCacheDir();
     for (let i = 0; i < urls.length; i++) {
       const fontRes = await fetch(urls[i]);
       if (!fontRes.ok) continue;
@@ -62,21 +62,20 @@ export async function ensureFontsForDesign(design) {
 
 // Re-registers previously-uploaded custom fonts with the canvas engine on
 // process startup (the in-memory font registry doesn't survive a restart).
+// Custom font files live only in Supabase now, so this fetches each one
+// fresh into the ephemeral tmp cache rather than assuming a local mirror.
 export async function registerAllCustomFonts() {
   const fonts = await listCustomFonts();
-  const dir = getLocalUploadsDir();
+  const dir = getFontCacheDir();
   for (const font of fonts) {
     try {
       const key = font.file_url.split('/').pop().split('?')[0];
-      const localPath = path.join(dir, key);
-      if (fs.existsSync(localPath)) {
-        registerFont(localPath, font.family_name);
-        markFontRegistered(font.family_name);
-      } else {
-        console.warn(
-          `[fontRegistry] local file missing for custom font "${font.family_name}" — it will render with a fallback font until re-uploaded.`
-        );
-      }
+      const cachePath = path.join(dir, key);
+      const res = await fetch(font.file_url);
+      if (!res.ok) throw new Error(`fetch failed (${res.status})`);
+      fs.writeFileSync(cachePath, Buffer.from(await res.arrayBuffer()));
+      registerFont(cachePath, font.family_name);
+      markFontRegistered(font.family_name);
     } catch (err) {
       console.error(`[fontRegistry] failed to register custom font "${font.family_name}":`, err.message);
     }
