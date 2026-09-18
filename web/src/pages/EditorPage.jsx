@@ -75,6 +75,8 @@ export default function EditorPage({ designId, onBack }) {
   const [leftTab, setLeftTab] = useState('elements');
   const [uploads, setUploads] = useState([]);
   const [uploadsLoading, setUploadsLoading] = useState(false);
+  const [positionPopoverOpen, setPositionPopoverOpen] = useState(false);
+  const [fieldPopoverOpen, setFieldPopoverOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,10 +147,12 @@ export default function EditorPage({ designId, onBack }) {
         const active = canvas.getActiveObject();
         setMultiSelected(active?.type === 'activeselection');
         setSelected(active ? snapshotObject(active) : null);
+        setPositionPopoverOpen(false);
+        setFieldPopoverOpen(false);
       };
       canvas.on('selection:created', syncSelection);
       canvas.on('selection:updated', syncSelection);
-      canvas.on('selection:cleared', () => { setSelected(null); setMultiSelected(false); });
+      canvas.on('selection:cleared', () => { setSelected(null); setMultiSelected(false); setPositionPopoverOpen(false); setFieldPopoverOpen(false); });
       canvas.on('object:modified', syncSelection);
 
       const pushHistory = () => {
@@ -228,6 +232,13 @@ export default function EditorPage({ designId, onBack }) {
     setUploadsLoading(true);
     api.listAssets().then(setUploads).catch(() => setUploads([])).finally(() => setUploadsLoading(false));
   }, [leftTab]);
+
+  useEffect(() => {
+    if (!positionPopoverOpen && !fieldPopoverOpen) return;
+    const onDocClick = () => { setPositionPopoverOpen(false); setFieldPopoverOpen(false); };
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, [positionPopoverOpen, fieldPopoverOpen]);
 
   function addUploadedImageToCanvas(asset) {
     fabric.FabricImage.fromURL(asset.url, { crossOrigin: 'anonymous' }).then((img) => {
@@ -661,6 +672,63 @@ export default function EditorPage({ designId, onBack }) {
               <button onClick={() => layerAction('front')} title="Bring to front">⇈</button>
             </div>
             <span className="toolbar-sep" />
+
+            <div className="ctx-popover-anchor">
+              <button
+                className={`ctx-icon-btn ${positionPopoverOpen ? 'active' : ''}`}
+                onClick={(e) => { e.stopPropagation(); setPositionPopoverOpen((v) => !v); setFieldPopoverOpen(false); }}
+                title="Position, size &amp; rotation"
+              >⊹</button>
+              {positionPopoverOpen && (
+                <div className="ctx-popover" onClick={(e) => e.stopPropagation()}>
+                  <div className="field-row">
+                    <div className="field"><label>X</label><input type="number" value={selected.left} onChange={(e) => applyBBox({ left: Number(e.target.value) })} /></div>
+                    <div className="field"><label>Y</label><input type="number" value={selected.top} onChange={(e) => applyBBox({ top: Number(e.target.value) })} /></div>
+                  </div>
+                  <div className="field-row">
+                    <div className="field"><label>W</label><input type="number" value={selected.width} onChange={(e) => applyBBox({ width: Number(e.target.value) })} /></div>
+                    <div className="field"><label>H</label><input type="number" value={selected.height} onChange={(e) => applyBBox({ height: Number(e.target.value) })} /></div>
+                  </div>
+                  <div className="field">
+                    <label>Rotation — or drag the handle on the selected element</label>
+                    <input type="number" value={selected.angle} onChange={(e) => applyBBox({ angle: Number(e.target.value) })} />
+                  </div>
+                  {isGroupSelected && <button className="ghost-btn full" onClick={ungroupSelected}>Ungroup</button>}
+                </div>
+              )}
+            </div>
+
+            {!isBackground && (
+              <div className="ctx-popover-anchor">
+                <button
+                  className={`ctx-icon-btn ${selected.fillcraftField ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!selected.fillcraftField) { toggleField(true); setFieldPopoverOpen(true); }
+                    else setFieldPopoverOpen((v) => !v);
+                    setPositionPopoverOpen(false);
+                  }}
+                  title={selected.fillcraftField ? 'Autofill field — click to edit' : 'Mark as autofill field'}
+                >🏷</button>
+                {fieldPopoverOpen && selected.fillcraftField && (
+                  <div className="ctx-popover" onClick={(e) => e.stopPropagation()}>
+                    <div className="field">
+                      <label>Field label (used by the n8n API)</label>
+                      <input type="text" value={selected.fillcraftField.label} onChange={(e) => updateFieldMeta({ label: e.target.value })} autoFocus />
+                    </div>
+                    {selected.fillcraftField.field_type === 'text' && (
+                      <div className="field">
+                        <label>Max characters</label>
+                        <input type="number" value={selected.fillcraftField.max_characters || 200} onChange={(e) => updateFieldMeta({ max_characters: Number(e.target.value) })} />
+                      </div>
+                    )}
+                    <button className="ghost-btn full" onClick={() => { toggleField(false); setFieldPopoverOpen(false); }}>Remove field</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <span className="toolbar-sep" />
             <button className="ctx-icon-btn" onClick={duplicateSelected} title="Duplicate (Ctrl+D)">⧉</button>
             {!isBackground && <button className="ctx-icon-btn danger" onClick={deleteSelected} title="Delete">🗑</button>}
           </div>
@@ -670,6 +738,15 @@ export default function EditorPage({ designId, onBack }) {
           <div className="context-bar">
             <button className="ghost-btn" onClick={groupSelected}>Group</button>
             <button className="ctx-icon-btn danger" onClick={deleteSelected} title="Delete selected">🗑</button>
+          </div>
+        )}
+
+        {!selected && design && (
+          <div className="context-bar">
+            <span className="ctx-slider-group" title="Canvas background">
+              <input type="color" value={canvasBg} onChange={(e) => updateCanvasBackground(e.target.value)} />
+              <span className="hint-text">{design.width} × {design.height}px</span>
+            </span>
           </div>
         )}
 
@@ -755,60 +832,6 @@ export default function EditorPage({ designId, onBack }) {
             <canvas ref={canvasElRef} />
           </div>
         </div>
-
-        {selected && !multiSelected && (
-          <div className="right-panel">
-            <h4>{selected.type}{isBackground ? ' (canvas background)' : ''}</h4>
-            <div className="field-row">
-              <div className="field"><label>X</label><input type="number" value={selected.left} onChange={(e) => applyBBox({ left: Number(e.target.value) })} /></div>
-              <div className="field"><label>Y</label><input type="number" value={selected.top} onChange={(e) => applyBBox({ top: Number(e.target.value) })} /></div>
-            </div>
-            <div className="field-row">
-              <div className="field"><label>W</label><input type="number" value={selected.width} onChange={(e) => applyBBox({ width: Number(e.target.value) })} /></div>
-              <div className="field"><label>H</label><input type="number" value={selected.height} onChange={(e) => applyBBox({ height: Number(e.target.value) })} /></div>
-            </div>
-            <div className="field">
-              <label>Rotation</label>
-              <input type="number" value={selected.angle} onChange={(e) => applyBBox({ angle: Number(e.target.value) })} />
-            </div>
-
-            {isGroupSelected && <button className="ghost-btn full" onClick={ungroupSelected}>Ungroup</button>}
-
-            {!isBackground && (
-              <>
-                <hr />
-                <div className="field">
-                  <label><input type="checkbox" checked={!!selected.fillcraftField} onChange={(e) => toggleField(e.target.checked)} /> Autofill field</label>
-                </div>
-                {selected.fillcraftField && (
-                  <>
-                    <div className="field">
-                      <label>Field label (used by the n8n API)</label>
-                      <input type="text" value={selected.fillcraftField.label} onChange={(e) => updateFieldMeta({ label: e.target.value })} />
-                    </div>
-                    {selected.fillcraftField.field_type === 'text' && (
-                      <div className="field">
-                        <label>Max characters</label>
-                        <input type="number" value={selected.fillcraftField.max_characters || 200} onChange={(e) => updateFieldMeta({ max_characters: Number(e.target.value) })} />
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {!selected && design && (
-          <div className="right-panel">
-            <h4>Canvas</h4>
-            <div className="field">
-              <label>Background color</label>
-              <input type="color" value={canvasBg} onChange={(e) => updateCanvasBackground(e.target.value)} />
-            </div>
-            <div className="hint-text">{design.width} × {design.height}px — select an object to edit it, or mark it as an autofill field.</div>
-          </div>
-        )}
       </div>
 
       <div className="editor-bottombar">
