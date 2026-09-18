@@ -60,7 +60,7 @@ export default async function designsRoutes(app) {
     ctx.fillStyle = background_color || '#FFFFFF';
     ctx.fillRect(0, 0, w, h);
     const thumbBuffer = await canvas.encode('png');
-    const asset = await storeAsset(thumbBuffer, 'blank.png', 'image/png');
+    const asset = await storeAsset(thumbBuffer, 'blank.png', 'image/png', 'thumbnails');
 
     const design = await createDesign({
       name: name || 'Untitled Design',
@@ -99,7 +99,7 @@ export default async function designsRoutes(app) {
     if (!design) return reply.code(404).send({ error: 'not_found' });
     await ensureFontsForDesign(design);
     const buffer = await renderDesign(design, {});
-    const asset = await storeAsset(buffer, `${design.id}-thumb.png`, 'image/png');
+    const asset = await storeAsset(buffer, `${design.id}-thumb.png`, 'image/png', 'thumbnails');
     const updated = await updateDesign(design.id, { thumbnail_url: asset.url });
     reply.send(updated);
   });

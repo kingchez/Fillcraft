@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as fabric from 'fabric';
 import { api } from '../api.js';
 
-const DISPLAY_MAX_WIDTH = 560;
 const HISTORY_LIMIT = 50;
 
 function newId() {
@@ -11,12 +10,23 @@ function newId() {
 
 const loadedFonts = new Set();
 function loadGoogleFontInBrowser(family) {
-  if (!family || loadedFonts.has(family)) return;
-  loadedFonts.add(family);
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:ital,wght@0,400;0,700;1,400&display=swap`;
-  document.head.appendChild(link);
+  if (!family) return Promise.resolve();
+  if (!loadedFonts.has(family)) {
+    loadedFonts.add(family);
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:ital,wght@0,400;0,700;1,400&display=swap`;
+    document.head.appendChild(link);
+  }
+  // A <link> only registers the @font-face description — it does NOT
+  // guarantee the glyph file has actually finished downloading by the
+  // time Fabric paints its next frame. That race is the real reason only
+  // a few fonts ever appeared to "work": whichever ones happened to
+  // already be loaded/cached painted correctly, and everything else
+  // silently rendered in the fallback font with no visible error.
+  // document.fonts.load() forces the browser to actually fetch + parse
+  // the font and resolves once it's truly ready to paint.
+  return document.fonts.load(`400 16px "${family}"`).catch(() => {});
 }
 
 // Custom fonts have no Google Fonts CSS endpoint — the browser needs a real
@@ -26,11 +36,14 @@ function loadGoogleFontInBrowser(family) {
 // autofill/export output — this is purely for the in-editor preview).
 const loadedCustomFontFamilies = new Set();
 function loadCustomFontInBrowser(family, fileUrl) {
-  if (!family || !fileUrl || loadedCustomFontFamilies.has(family)) return;
-  loadedCustomFontFamilies.add(family);
-  const style = document.createElement('style');
-  style.textContent = `@font-face { font-family: "${family.replace(/"/g, '')}"; src: url("${fileUrl}"); font-display: swap; }`;
-  document.head.appendChild(style);
+  if (!family || !fileUrl) return Promise.resolve();
+  if (!loadedCustomFontFamilies.has(family)) {
+    loadedCustomFontFamilies.add(family);
+    const style = document.createElement('style');
+    style.textContent = `@font-face { font-family: "${family.replace(/"/g, '')}"; src: url("${fileUrl}"); font-display: swap; }`;
+    document.head.appendChild(style);
+  }
+  return document.fonts.load(`400 16px "${family}"`).catch(() => {});
 }
 
 function toHexColor(color) {
@@ -60,8 +73,31 @@ function starPoints(spikes, outerR, innerR) {
   return pts;
 }
 
+// Scans the canvas for every distinct fontFamily currently in use (one
+// level into groups) and makes sure each one is actually loaded in the
+// browser before repainting. Without this, reopening a saved design shows
+// every text object in the browser's fallback font until the user happens
+// to reselect that exact font in the picker — the fonts were never broken,
+// they just were never asked to load on open in the first place.
+async function preloadFontsUsedInCanvas(canvas, customFontsList) {
+  const families = new Set();
+  const collect = (obj) => {
+    if (obj.fontFamily) families.add(obj.fontFamily);
+    if (typeof obj.getObjects === 'function') obj.getObjects().forEach(collect);
+  };
+  canvas.getObjects().forEach(collect);
+  if (families.size === 0) return;
+
+  await Promise.all([...families].map((family) => {
+    const custom = customFontsList.find((f) => f.family_name === family);
+    return custom ? loadCustomFontInBrowser(custom.family_name, custom.file_url) : loadGoogleFontInBrowser(family);
+  }));
+  canvas.requestRenderAll();
+}
+
 export default function EditorPage({ designId, onBack }) {
   const canvasElRef = useRef(null);
+  const canvasViewportRef = useRef(null);
   const fabricRef = useRef(null);
   const historyRef = useRef({ stack: [], index: -1, suppress: false });
   const [design, setDesign] = useState(null);
@@ -111,7 +147,20 @@ export default function EditorPage({ designId, onBack }) {
       const d = await api.getDesign(designId);
       if (cancelled) return;
       setDesign(d);
-      const initialScale = Math.min(DISPLAY_MAX_WIDTH / d.width, 1);
+      // Fit to the ACTUAL viewport, both dimensions — the old version only
+      // ever capped width at a hardcoded 560px and ignored height entirely.
+      // For a tall design (e.g. 1080x1920) that meant the canvas was
+      // created taller than the visible viewport, and combined with the
+      // centering CSS bug fixed alongside this (see .canvas-viewport),
+      // that's exactly what caused "only part of the background is
+      // visible, not the whole thing I'm designing on" — the canvas itself
+      // was always the right size, the viewport just couldn't show or
+      // scroll to all of it.
+      const viewportEl = canvasViewportRef.current;
+      const padding = 64; // breathing room so the canvas edge isn't flush against the viewport edge
+      const availW = Math.max((viewportEl?.clientWidth || 800) - padding, 100);
+      const availH = Math.max((viewportEl?.clientHeight || 600) - padding, 100);
+      const initialScale = Math.min(availW / d.width, availH / d.height, 1);
       setBaseScale(initialScale);
 
       // The canvas element is created at the scaled-down DISPLAY size, not
@@ -154,6 +203,10 @@ export default function EditorPage({ designId, onBack }) {
       const bgObj = canvas.getObjects().find((o) => o.id === 'background');
       if (bgObj) setCanvasBg(bgObj.fill || '#FFFFFF');
       canvas.requestRenderAll();
+
+      // Fetched fresh here (not read from component state) so this can't
+      // race the separate effect that populates the font-picker dropdown.
+      api.listCustomFonts().then((fonts) => preloadFontsUsedInCanvas(canvas, fonts)).catch(() => {});
 
       const syncSelection = () => {
         const active = canvas.getActiveObject();
@@ -572,9 +625,12 @@ export default function EditorPage({ designId, onBack }) {
 
   function selectFont(family) {
     const custom = customFonts.find((f) => f.family_name === family);
-    if (custom) loadCustomFontInBrowser(custom.family_name, custom.file_url);
-    else loadGoogleFontInBrowser(family);
+    const loadPromise = custom ? loadCustomFontInBrowser(custom.family_name, custom.file_url) : loadGoogleFontInBrowser(family);
     applyToSelected({ fontFamily: family });
+    // Re-render once the real glyphs are ready — applyToSelected() already
+    // painted immediately with whatever was cached/fallback, so this is
+    // what actually swaps it to the correct font a moment later.
+    loadPromise.then(() => fabricRef.current?.requestRenderAll());
   }
 
   async function uploadFontFile(e) {
@@ -888,7 +944,7 @@ export default function EditorPage({ designId, onBack }) {
           )}
         </div>
 
-        <div className="canvas-viewport">
+        <div className="canvas-viewport" ref={canvasViewportRef}>
           <div className="canvas-stage" style={{ width: displayW || 400, height: displayH || 300, position: 'relative' }}>
             {!design && <div className="empty-state" style={{ position: 'absolute', inset: 0 }}>Loading design…</div>}
             <canvas ref={canvasElRef} />

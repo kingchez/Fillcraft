@@ -97,7 +97,7 @@ export default async function canvaRoutes(app) {
               try {
                 const { buffer, mime } = await resolveImageHref(result.imageHrefs[obj.id]);
                 const ext = mime.split('/')[1] || 'png';
-                const asset = await storeAsset(buffer, `${designId}-${obj.id}.${ext}`, mime);
+                const asset = await storeAsset(buffer, `${designId}-${obj.id}.${ext}`, mime, 'imported');
                 obj.src = asset.url;
               } catch (imgErr) {
                 req.log.warn(`Could not resolve embedded image: ${imgErr.message}`);
@@ -126,7 +126,7 @@ export default async function canvaRoutes(app) {
               try {
                 const buffer = await extractMedia(result.zip, result.imageMediaPaths[obj.id]);
                 const ext = result.imageMediaPaths[obj.id].split('.').pop() || 'png';
-                const asset = await storeAsset(buffer, `${designId}-${obj.id}.${ext}`, `image/${ext}`);
+                const asset = await storeAsset(buffer, `${designId}-${obj.id}.${ext}`, `image/${ext}`, 'imported');
                 obj.src = asset.url;
               } catch (imgErr) {
                 req.log.warn(`Could not extract PPTX embedded image: ${imgErr.message}`);
@@ -144,7 +144,7 @@ export default async function canvaRoutes(app) {
       // Flattened PNG as the base layer — either the sole content (SVG
       // unavailable/failed) or sitting behind the extracted objects so
       // nothing visually goes missing even where extraction didn't reach.
-      const bgAsset = await storeAsset(pngBuffer, `${designId}-bg.png`, 'image/png');
+      const bgAsset = await storeAsset(pngBuffer, `${designId}-bg.png`, 'image/png', 'imported');
       const bgObject = {
         id: 'canva-flattened-bg', type: 'image', src: bgAsset.url,
         left: 0, top: 0, width, height, scaleX: 1, scaleY: 1,

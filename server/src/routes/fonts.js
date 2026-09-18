@@ -45,7 +45,7 @@ export default async function fontsRoutes(app) {
       return reply.code(400).send({ error: 'family_name and a font file are both required' });
     }
 
-    const asset = await storeAsset(fileBuffer, filename, mimetype || 'font/ttf');
+    const asset = await storeAsset(fileBuffer, filename, mimetype || 'font/ttf', 'fonts');
     const font = await createCustomFont({ family_name: familyName, file_url: asset.url });
 
     // The renderer's font engine needs a real file on disk to register a
@@ -53,7 +53,11 @@ export default async function fontsRoutes(app) {
     // them straight to the ephemeral tmp cache (not persistent storage;
     // see fontCache.js) rather than re-downloading from Supabase.
     try {
-      const cachePath = path.join(getFontCacheDir(), asset.local_path);
+      // asset.local_path is now folder-qualified ("fonts/<uuid>-name.ttf");
+      // use just the basename for the flat tmp-cache filename rather than
+      // joining the folder in (which would require that subdirectory to
+      // exist under the OS tmp dir too).
+      const cachePath = path.join(getFontCacheDir(), path.basename(asset.local_path));
       fs.writeFileSync(cachePath, fileBuffer);
       registerFont(cachePath, familyName);
       markFontRegistered(familyName);

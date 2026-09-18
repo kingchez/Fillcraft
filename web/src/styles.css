@@ -227,21 +227,24 @@ body {
 
 /* Top bar: basic controls, or a floating context bar when an object is selected */
 .editor-topbar {
-  display: flex; align-items: center; gap: 8px; padding: 10px 16px; flex-wrap: wrap;
-  border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 52px;
+  display: flex; align-items: center; gap: 6px; padding: 6px 14px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 40px;
 }
 .editor-topbar button { white-space: nowrap; }
-.toolbar-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
-.context-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.editor-topbar .primary-btn, .editor-topbar .ghost-btn, .editor-topbar .danger-btn {
+  padding: 6px 12px; font-size: 12.5px;
+}
+.toolbar-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+.context-bar { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .context-font-input {
   width: 150px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-  border-radius: 6px; padding: 4px 6px; font-size: 13px;
+  border-radius: 6px; padding: 3px 6px; font-size: 12px;
 }
 .context-num { width: 56px; }
 .ctx-icon-btn {
   background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-  width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: flex;
-  align-items: center; justify-content: center; font-size: 13px; transition: all .12s ease;
+  width: 28px; height: 28px; border-radius: 7px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; font-size: 12px; transition: all .12s ease;
 }
 .ctx-icon-btn:hover { border-color: var(--violet); color: var(--violet); }
 .ctx-icon-btn.active { background: var(--grad-primary); color: #1a1024; border-color: transparent; }
@@ -303,8 +306,17 @@ body {
 .upload-item:hover .upload-item-menu { opacity: 1; }
 .upload-item-menu:hover { background: rgba(255,107,107,.5); }
 
-.canvas-viewport { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: auto; }
-.canvas-stage { position: relative; margin: 24px; background: #0A0812; flex-shrink: 0; user-select: none; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-soft); }
+.canvas-viewport {
+  flex: 1; min-width: 0; overflow: auto; padding: 32px;
+  /* Deliberately NOT display:flex + align-items/justify-content:center here.
+     Centering an overflowing child that way is a well-known cross-browser
+     trap: once content is taller/wider than the container, the "before"
+     side of the overflow becomes unreachable by scrolling in several
+     browsers, silently hiding the top/left part of whatever's centered.
+     For a canvas you're meant to be able to see and scroll to every edge
+     of, margin-based centering below doesn't have that failure mode. */
+}
+.canvas-stage { position: relative; margin: 0 auto; background: #0A0812; user-select: none; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-soft); }
 .canvas-stage img { display: block; user-select: none; pointer-events: none; }
 
 .field-row { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -327,10 +339,11 @@ body {
 
 /* Bottom zoom bar — kept separate from the page footer with real breathing room below it */
 .editor-bottombar {
-  display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 16px 22px;
-  border-top: 1px solid var(--border); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 16px 12px;
+  border-top: 1px solid var(--border); flex-shrink: 0; min-height: 0;
 }
-.zoom-slider { width: 160px; }
+.editor-bottombar .ghost-btn { padding: 5px 10px; font-size: 12.5px; }
+.zoom-slider { width: 130px; }
 
 .preview-layout { display: flex; gap: 20px; }
 .preview-fields { flex: 1; }
