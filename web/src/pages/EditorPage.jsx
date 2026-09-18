@@ -3,12 +3,6 @@ import * as fabric from 'fabric';
 import { api } from '../api.js';
 
 const DISPLAY_MAX_WIDTH = 560;
-const GOOGLE_FONTS_QUICKLIST = [
-  'Inter', 'Poppins', 'Nunito', 'Montserrat', 'Playfair Display', 'Roboto', 'Oswald', 'Lora',
-  'Bebas Neue', 'Anton', 'Raleway', 'Merriweather', 'Work Sans', 'DM Sans', 'Space Grotesk',
-  'Pacifico', 'Caveat', 'Abril Fatface', 'Archivo Black', 'Josefin Sans', 'Libre Baskerville',
-  'Fjalla One', 'Cormorant Garamond', 'Dancing Script', 'Bitter', 'Karla', 'Comfortaa',
-];
 const HISTORY_LIMIT = 50;
 
 function newId() {
@@ -23,6 +17,20 @@ function loadGoogleFontInBrowser(family) {
   link.rel = 'stylesheet';
   link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:ital,wght@0,400;0,700;1,400&display=swap`;
   document.head.appendChild(link);
+}
+
+// Custom fonts have no Google Fonts CSS endpoint — the browser needs a real
+// @font-face rule pointing at the uploaded file's Supabase URL, or selecting
+// one in the picker changes fontFamily but nothing visibly renders (the
+// server-side renderer already registers these separately for the actual
+// autofill/export output — this is purely for the in-editor preview).
+const loadedCustomFontFamilies = new Set();
+function loadCustomFontInBrowser(family, fileUrl) {
+  if (!family || !fileUrl || loadedCustomFontFamilies.has(family)) return;
+  loadedCustomFontFamilies.add(family);
+  const style = document.createElement('style');
+  style.textContent = `@font-face { font-family: "${family.replace(/"/g, '')}"; src: url("${fileUrl}"); font-display: swap; }`;
+  document.head.appendChild(style);
 }
 
 function toHexColor(color) {
@@ -75,8 +83,12 @@ export default function EditorPage({ designId, onBack }) {
   const [leftTab, setLeftTab] = useState('elements');
   const [uploads, setUploads] = useState([]);
   const [uploadsLoading, setUploadsLoading] = useState(false);
+  const [newFontName, setNewFontName] = useState('');
+  const [fontUploading, setFontUploading] = useState(false);
   const [positionPopoverOpen, setPositionPopoverOpen] = useState(false);
   const [fieldPopoverOpen, setFieldPopoverOpen] = useState(false);
+  const [googleFonts, setGoogleFonts] = useState([]);
+  const [customFonts, setCustomFonts] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,6 +244,14 @@ export default function EditorPage({ designId, onBack }) {
     setUploadsLoading(true);
     api.listAssets().then(setUploads).catch(() => setUploads([])).finally(() => setUploadsLoading(false));
   }, [leftTab]);
+
+  // Full font lists for the picker — was previously a ~26-name list
+  // hardcoded in this file (a fraction of the 60 Google Fonts the server
+  // actually supports) and never included custom-uploaded fonts at all.
+  useEffect(() => {
+    api.listGoogleFonts().then(setGoogleFonts).catch(() => setGoogleFonts([]));
+    api.listCustomFonts().then(setCustomFonts).catch(() => setCustomFonts([]));
+  }, []);
 
   useEffect(() => {
     if (!positionPopoverOpen && !fieldPopoverOpen) return;
@@ -550,6 +570,31 @@ export default function EditorPage({ designId, onBack }) {
     if (bgObj) { bgObj.set({ fill: color }); canvas.requestRenderAll(); }
   }
 
+  function selectFont(family) {
+    const custom = customFonts.find((f) => f.family_name === family);
+    if (custom) loadCustomFontInBrowser(custom.family_name, custom.file_url);
+    else loadGoogleFontInBrowser(family);
+    applyToSelected({ fontFamily: family });
+  }
+
+  async function uploadFontFile(e) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const familyName = (newFontName || file.name.replace(/\.[^.]+$/, '')).trim();
+    if (!familyName) { setError('Give the font a name before uploading.'); return; }
+    setFontUploading(true);
+    try {
+      const font = await api.uploadCustomFont(file, familyName);
+      setCustomFonts((f) => [...f, font]);
+      setNewFontName('');
+    } catch (err) {
+      setError(`Font upload failed: ${err.message}`);
+    } finally {
+      setFontUploading(false);
+    }
+  }
+
   const saveDesign = useCallback(async () => {
     const canvas = fabricRef.current;
     if (!canvas) return;
@@ -611,15 +656,20 @@ export default function EditorPage({ designId, onBack }) {
           <div className="context-bar">
             {isTextSelected && (
               <>
-                <input
+                <select
                   className="context-font-input"
-                  list="google-fonts-list"
                   value={selected.fontFamily || 'Inter'}
-                  onChange={(e) => { loadGoogleFontInBrowser(e.target.value); applyToSelected({ fontFamily: e.target.value }); }}
-                />
-                <datalist id="google-fonts-list">
-                  {GOOGLE_FONTS_QUICKLIST.map((f) => <option key={f} value={f} />)}
-                </datalist>
+                  onChange={(e) => selectFont(e.target.value)}
+                >
+                  {customFonts.length > 0 && (
+                    <optgroup label="Your fonts">
+                      {customFonts.map((f) => <option key={f.family_name} value={f.family_name}>{f.family_name}</option>)}
+                    </optgroup>
+                  )}
+                  <optgroup label="Google Fonts">
+                    {(googleFonts.length ? googleFonts : ['Inter']).map((f) => <option key={f} value={f}>{f}</option>)}
+                  </optgroup>
+                </select>
                 <input type="number" className="context-num" value={selected.fontSize || 24} onChange={(e) => applyToSelected({ fontSize: Number(e.target.value) })} />
                 <button className={`ctx-icon-btn ${selected.fontWeight === 'bold' ? 'active' : ''}`} onClick={() => applyToSelected({ fontWeight: selected.fontWeight === 'bold' ? 'normal' : 'bold' })} title="Bold"><b>B</b></button>
                 <button className={`ctx-icon-btn ${selected.fontStyle === 'italic' ? 'active' : ''}`} onClick={() => applyToSelected({ fontStyle: selected.fontStyle === 'italic' ? 'normal' : 'italic' })} title="Italic"><i>I</i></button>
@@ -794,6 +844,18 @@ export default function EditorPage({ designId, onBack }) {
                     Import SVG
                     <input type="file" accept=".svg,image/svg+xml" style={{ display: 'none' }} onChange={importSvg} disabled={!design} />
                   </label>
+
+                  <div className="left-section-title">Fonts</div>
+                  <input
+                    type="text" className="left-panel-item wide" placeholder="Font name (e.g. My Brand Sans)"
+                    value={newFontName} onChange={(e) => setNewFontName(e.target.value)} disabled={!design}
+                    style={{ marginBottom: 6 }}
+                  />
+                  <label className="left-panel-item wide" style={{ cursor: design && !fontUploading ? 'pointer' : 'default', opacity: design && !fontUploading ? 1 : 0.5 }}>
+                    {fontUploading ? 'Uploading…' : '+ Upload font (.ttf, .otf, .woff, .woff2)'}
+                    <input type="file" accept=".ttf,.otf,.woff,.woff2" style={{ display: 'none' }} onChange={uploadFontFile} disabled={!design || fontUploading} />
+                  </label>
+                  {customFonts.length > 0 && <div className="hint-text">{customFonts.length} custom font{customFonts.length === 1 ? '' : 's'} — pick it from the font dropdown on any text box.</div>}
 
                   <div className="left-section-title">History</div>
                   <div className="align-row">
