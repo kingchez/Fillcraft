@@ -884,9 +884,28 @@ export default function EditorPage({ designId, onBack }) {
       {error && <div className="error-text" style={{ padding: '8px 16px' }}>{error}</div>}
 
       <div className="editor-body">
+        <div className="canvas-viewport" ref={canvasViewportRef}>
+          <div className="canvas-stage">
+            {!design && <div className="empty-state loading-placeholder">Loading design…</div>}
+            <canvas ref={canvasElRef} />
+          </div>
+
+          <div className="zoom-pill">
+            <button className="ghost-btn" onClick={() => setZoom((z) => Math.max(0.25, z - 0.1))}>−</button>
+            <input
+              type="range" min="0.25" max="3" step="0.01" value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="zoom-slider"
+            />
+            <button className="ghost-btn" onClick={() => setZoom((z) => Math.min(3, z + 0.1))}>+</button>
+            <span className="zoom-label">{Math.round(zoom * 100)}%</span>
+            <button className="ghost-btn" onClick={() => setZoom(1)}>Fit</button>
+          </div>
+        </div>
+
         <div className={`left-panel ${leftPanelOpen ? '' : 'collapsed'}`}>
           <button className="left-panel-toggle" onClick={() => setLeftPanelOpen((v) => !v)} title={leftPanelOpen ? 'Collapse' : 'Expand'}>
-            {leftPanelOpen ? '‹' : '›'}
+            {leftPanelOpen ? '›' : '‹'}
           </button>
           {leftPanelOpen && (
             <>
@@ -962,25 +981,6 @@ export default function EditorPage({ designId, onBack }) {
             </>
           )}
         </div>
-
-        <div className="canvas-viewport" ref={canvasViewportRef}>
-          <div className="canvas-stage">
-            {!design && <div className="empty-state loading-placeholder">Loading design…</div>}
-            <canvas ref={canvasElRef} />
-          </div>
-        </div>
-      </div>
-
-      <div className="editor-bottombar">
-        <button className="ghost-btn" onClick={() => setZoom((z) => Math.max(0.25, z - 0.1))}>−</button>
-        <input
-          type="range" min="0.25" max="3" step="0.01" value={zoom}
-          onChange={(e) => setZoom(Number(e.target.value))}
-          className="zoom-slider"
-        />
-        <button className="ghost-btn" onClick={() => setZoom((z) => Math.min(3, z + 0.1))}>+</button>
-        <span className="zoom-label">{Math.round(zoom * 100)}%</span>
-        <button className="ghost-btn" onClick={() => setZoom(1)}>Fit</button>
       </div>
 
       {iconPickerOpen && (

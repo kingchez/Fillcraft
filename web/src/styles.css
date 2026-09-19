@@ -222,13 +222,38 @@ body {
 .checkboxes { align-items: center; }
 .checkboxes label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
 
-/* ---- Editor page ---- */
-.editor-page { display: flex; flex-direction: column; flex: 1; min-height: 0; background: #0d0b14; }
+/* ---- Editor page — a distinct visual identity from the rest of the app:
+   warm brass/parchment "workshop desk" palette instead of the violet/pink
+   candy gradient used elsewhere, scoped entirely to .editor-page via CSS
+   custom property overrides so nothing outside the editor is affected —
+   every var(--panel)/var(--border)/var(--violet)/etc. reference already
+   used by buttons, modals, and form fields picks this up automatically. ---- */
+.editor-page {
+  --bg: #17140F;
+  --panel: #211B14;
+  --panel-2: #2B2419;
+  --border: #3D3324;
+  --text: #EFE7D6;
+  --muted: #A69C87;
+  --violet: #C99A4B;
+  --pink: #C99A4B;
+  --sky: #C99A4B;
+  --coral: #C1613B;
+  --danger: #C1613B;
+  --mint: #9CAF6B;
+  --grad-primary: linear-gradient(135deg, #DDB471, #B4823A);
+  --grad-brand: linear-gradient(135deg, #DDB471, #B4823A);
+  --shadow-soft: 0 10px 30px rgba(0,0,0,.5);
+  display: flex; flex-direction: column; flex: 1; min-height: 0;
+  background: var(--bg); color: var(--text);
+}
+.editor-page .primary-btn, .editor-page .ctx-icon-btn.active { color: #1B160F; }
+.editor-page .left-section-title, .editor-page .modal h3 { font-family: 'Sora', 'Inter', sans-serif; letter-spacing: -.01em; }
 
 /* Top bar: basic controls, or a floating context bar when an object is selected */
 .editor-topbar {
-  display: flex; align-items: center; gap: 6px; padding: 6px 14px; flex-wrap: wrap;
-  border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 40px;
+  display: flex; align-items: center; gap: 6px; padding: 5px 14px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 36px;
 }
 .editor-topbar button { white-space: nowrap; }
 .editor-topbar .primary-btn, .editor-topbar .ghost-btn, .editor-topbar .danger-btn {
@@ -265,10 +290,10 @@ body {
 /* Body: left retractable panel, canvas viewport, right panel */
 .editor-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
-.left-panel { width: 260px; border-right: 1px solid var(--border); flex-shrink: 0; position: relative; display: flex; flex-direction: column; background: var(--panel); transition: width .15s ease; }
+.left-panel { width: 260px; border-left: 1px solid var(--border); flex-shrink: 0; position: relative; display: flex; flex-direction: column; background: var(--panel); transition: width .15s ease; }
 .left-panel.collapsed { width: 28px; }
 .left-panel-toggle {
-  position: absolute; top: 10px; right: -13px; z-index: 3; width: 26px; height: 26px; border-radius: 50%;
+  position: absolute; top: 10px; left: -13px; z-index: 3; width: 26px; height: 26px; border-radius: 50%;
   background: var(--panel-2); border: 1px solid var(--border); color: var(--text); cursor: pointer;
   display: flex; align-items: center; justify-content: center; font-size: 14px;
 }
@@ -308,7 +333,7 @@ body {
 
 .canvas-viewport {
   flex: 1; min-width: 0; overflow: auto; padding: 32px;
-  text-align: center; /* centers the inline-block .canvas-stage horizontally */
+  text-align: center; position: relative; /* position:relative anchors .zoom-pill below to this viewport's own box, not the scrolled content, so it stays put regardless of scroll position */
   /* Deliberately NOT display:flex + align-items:center here. Centering an
      overflowing child that way is a well-known cross-browser trap: once
      content is taller than the container, the "before" side of the
@@ -320,7 +345,7 @@ body {
 }
 .canvas-stage {
   position: relative; display: inline-block; text-align: left;
-  background: #0A0812; user-select: none; box-shadow: var(--shadow-soft); line-height: 0;
+  background: #120F0A; user-select: none; box-shadow: var(--shadow-soft); line-height: 0;
   /* NO width/height here, ever — that was the actual root cause behind
      every past sizing bug (corners clipped, background not filling,
      content cut off): a wrapper computing its OWN size independently of
@@ -359,13 +384,17 @@ body {
 .icon-grid-item:hover { border-color: var(--violet); }
 .icon-grid-item img { width: 24px; height: 24px; }
 
-/* Bottom zoom bar — kept separate from the page footer with real breathing room below it */
-.editor-bottombar {
-  display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 16px 12px;
-  border-top: 1px solid var(--border); flex-shrink: 0; min-height: 0;
+/* Floating zoom pill — anchored to the canvas viewport itself (not a full-
+   width bar under the whole page), so it never grows/shrinks the page and
+   never separately competes for space with the topbar or panel. */
+.zoom-pill {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+  box-shadow: var(--shadow-soft); z-index: 5;
 }
-.editor-bottombar .ghost-btn { padding: 5px 10px; font-size: 12.5px; }
-.zoom-slider { width: 130px; }
+.zoom-pill .ghost-btn { padding: 4px 10px; font-size: 12.5px; border-radius: 999px; }
+.zoom-slider { width: 110px; }
 
 .preview-layout { display: flex; gap: 20px; }
 .preview-fields { flex: 1; }
