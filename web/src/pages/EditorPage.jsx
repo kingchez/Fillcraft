@@ -3,6 +3,30 @@ import * as fabric from 'fabric';
 import { api } from '../api.js';
 import { computeFitScale } from '../lib/fitScale.js';
 
+// THE actual root cause of every rendering bug chased in this file's
+// history — not CSS, not sizing math, not retina scaling. Fabric v7
+// changed its default originX/originY from 'left'/'top' (old Fabric, and
+// what every object this app creates or has ever saved assumes) to
+// 'center'/'center'. That means `left`/`top` were silently being
+// interpreted as an object's CENTER point instead of its top-left corner
+// — every object this app has ever created or loaded was shifted up-and-
+// left by exactly half its own width/height, leaving only its bottom-
+// right quadrant actually on-canvas. That's the whole "background only
+// fills part of the canvas" / "imported design's content is cut off"
+// story, verified with a full reproduction (see fitScale-era investigation
+// notes) using fabric/node directly: a plain 1000x1000 rect at left:0,
+// top:0 produced getBoundingRect() = {left:-500,top:-500,width:1000,...}
+// until this was set.
+//
+// Fixed globally, once, here — not by adding originX/originY to every
+// object-creation call site — specifically because it also retroactively
+// fixes every design already saved in the database without a migration:
+// their saved left/top values were always written assuming top-left
+// semantics, so nothing about existing data needs to change, only how
+// Fabric interprets it on load.
+fabric.FabricObject.ownDefaults.originX = 'left';
+fabric.FabricObject.ownDefaults.originY = 'top';
+
 const HISTORY_LIMIT = 50;
 
 function newId() {
