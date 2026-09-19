@@ -308,25 +308,38 @@ body {
 
 .canvas-viewport {
   flex: 1; min-width: 0; overflow: auto; padding: 32px;
-  /* Deliberately NOT display:flex + align-items/justify-content:center here.
-     Centering an overflowing child that way is a well-known cross-browser
-     trap: once content is taller/wider than the container, the "before"
-     side of the overflow becomes unreachable by scrolling in several
-     browsers, silently hiding the top/left part of whatever's centered.
-     For a canvas you're meant to be able to see and scroll to every edge
-     of, margin-based centering below doesn't have that failure mode. */
+  text-align: center; /* centers the inline-block .canvas-stage horizontally */
+  /* Deliberately NOT display:flex + align-items:center here. Centering an
+     overflowing child that way is a well-known cross-browser trap: once
+     content is taller than the container, the "before" side of the
+     overflow can become unreachable by scrolling in several browsers,
+     silently hiding the top part of whatever's centered. text-align:center
+     on inline-block content doesn't have that failure mode, and top-
+     anchoring (no vertical centering) guarantees every edge stays
+     scrollable to when content is taller than the viewport. */
 }
 .canvas-stage {
-  position: relative; margin: 0 auto; background: #0A0812; user-select: none; box-shadow: var(--shadow-soft);
-  /* NOT border-radius/overflow:hidden — a design canvas is a rectangle;
-     rounding and clipping its corners was cutting the four corners off
-     your actual design and letting this dark wrapper background show
-     through underneath, which is exactly the "darker purple area not
-     getting filled" — the fixed 8px radius ate a bigger visible fraction
-     of the canvas the more zoomed-out you were, matching what you saw
-     get worse on Fit. */
+  position: relative; display: inline-block; text-align: left;
+  background: #0A0812; user-select: none; box-shadow: var(--shadow-soft); line-height: 0;
+  /* NO width/height here, ever — that was the actual root cause behind
+     every past sizing bug (corners clipped, background not filling,
+     content cut off): a wrapper computing its OWN size independently of
+     the real <canvas> element's size, with the two occasionally drifting
+     apart. This div now has no size of its own at all — it shrink-wraps
+     exactly to whatever the real <canvas> inside it is, by definition, so
+     there is structurally nothing left for it to drift from. The single
+     place canvas size is computed is computeFitScale() (src/lib/fitScale.js),
+     which only ever sets the real <canvas> element's dimensions via
+     Fabric's own canvas.setDimensions() — never this div.
+     NOT border-radius/overflow:hidden either — a design canvas is a plain
+     rectangle; rounding/clipping its corners cuts the four corners off the
+     actual design and lets this dark background show through underneath. */
 }
 .canvas-stage img { display: block; user-select: none; pointer-events: none; }
+.loading-placeholder {
+  display: flex; align-items: center; justify-content: center;
+  width: 300px; height: 400px; /* independent of design size — shown only before a design (and its real dimensions) has loaded at all */
+}
 
 .field-row { display: flex; gap: 8px; margin-bottom: 14px; }
 .field-row .field { flex: 1; margin-bottom: 0; }

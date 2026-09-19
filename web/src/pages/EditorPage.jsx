@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as fabric from 'fabric';
 import { api } from '../api.js';
+import { computeFitScale } from '../lib/fitScale.js';
 
 const HISTORY_LIMIT = 50;
 
@@ -127,20 +128,13 @@ export default function EditorPage({ designId, onBack }) {
   const [customFonts, setCustomFonts] = useState([]);
 
   // Shared with the initial-load fit calculation below — re-measures the
-  // actual viewport and refits whenever it's plausible the AVAILABLE space
-  // changed after load (panel collapsed/expanded, window resized). Without
-  // this, the canvas was only ever sized correctly at the exact instant it
-  // first loaded — collapsing the left panel (freeing up width) or resizing
-  // the browser never re-fit it, so it could end up not matching the space
-  // actually available, which is consistent with the cut-off-content report
-  // on a design opened with the panel already collapsed.
+  // actual viewport and refits. Backed by computeFitScale (src/lib/fitScale.js),
+  // the one tested source of truth for this — this function's only job is
+  // to read the DOM and hand off to it.
   const refitToContainer = useCallback((d) => {
     const viewportEl = canvasViewportRef.current;
-    if (!viewportEl) return;
-    const padding = 64;
-    const availW = Math.max(viewportEl.clientWidth - padding, 100);
-    const availH = Math.max(viewportEl.clientHeight - padding, 100);
-    setBaseScale(Math.min(availW / d.width, availH / d.height, 1));
+    if (!viewportEl || !d) return;
+    setBaseScale(computeFitScale(viewportEl.clientWidth, viewportEl.clientHeight, d.width, d.height));
   }, []);
 
   useEffect(() => {
@@ -164,20 +158,10 @@ export default function EditorPage({ designId, onBack }) {
       const d = await api.getDesign(designId);
       if (cancelled) return;
       setDesign(d);
-      // Fit to the ACTUAL viewport, both dimensions — the old version only
-      // ever capped width at a hardcoded 560px and ignored height entirely.
-      // For a tall design (e.g. 1080x1920) that meant the canvas was
-      // created taller than the visible viewport, and combined with the
-      // centering CSS bug fixed alongside this (see .canvas-viewport),
-      // that's exactly what caused "only part of the background is
-      // visible, not the whole thing I'm designing on" — the canvas itself
-      // was always the right size, the viewport just couldn't show or
-      // scroll to all of it.
+      // Single source of truth for this calculation — see src/lib/fitScale.js
+      // and its test suite. No formula lives inline here anymore.
       const viewportEl = canvasViewportRef.current;
-      const padding = 64; // breathing room so the canvas edge isn't flush against the viewport edge
-      const availW = Math.max((viewportEl?.clientWidth || 800) - padding, 100);
-      const availH = Math.max((viewportEl?.clientHeight || 600) - padding, 100);
-      const initialScale = Math.min(availW / d.width, availH / d.height, 1);
+      const initialScale = computeFitScale(viewportEl?.clientWidth || 800, viewportEl?.clientHeight || 600, d.width, d.height);
       setBaseScale(initialScale);
       // The canvas element is created at the scaled-down DISPLAY size, not
       // the full design size — Fabric's own zoom then draws design-space
@@ -322,27 +306,26 @@ export default function EditorPage({ designId, onBack }) {
     api.listCustomFonts().then(setCustomFonts).catch(() => setCustomFonts([]));
   }, []);
 
-  // Re-fit when the left panel finishes its collapse/expand transition
-  // (.left-panel has a 150ms width transition — measuring immediately on
-  // toggle would grab the width mid-animation) and on window resize.
-  // Previously the canvas was only ever sized once, at the exact instant
-  // it first loaded — collapsing the panel (freeing up width) or resizing
-  // the browser never re-fit it.
+  // Re-fit on ANY change to the viewport's actual size — panel collapse/
+  // expand, window resize, browser zoom, DevTools opening, anything.
+  // ResizeObserver reports the real box size directly rather than guessing
+  // which specific user actions might change it and hard-coding a
+  // transition-duration timeout for each one (which is what this used to
+  // do, and which only covered the two cases anyone had thought of).
   useEffect(() => {
-    if (!design) return;
-    const t = setTimeout(() => refitToContainer(design), 200);
-    return () => clearTimeout(t);
-  }, [leftPanelOpen, design, refitToContainer]);
-
-  useEffect(() => {
-    if (!design) return;
+    const viewportEl = canvasViewportRef.current;
+    if (!viewportEl || !design) return;
     let t;
-    const onResize = () => {
+    const observer = new ResizeObserver(() => {
       clearTimeout(t);
-      t = setTimeout(() => refitToContainer(design), 150);
-    };
-    window.addEventListener('resize', onResize);
-    return () => { window.removeEventListener('resize', onResize); clearTimeout(t); };
+      // Debounced, not throttled: ResizeObserver fires repeatedly for the
+      // full duration of the left panel's CSS transition — this waits for
+      // it to actually settle instead of refitting against a mid-animation
+      // size on every single frame.
+      t = setTimeout(() => refitToContainer(design), 60);
+    });
+    observer.observe(viewportEl);
+    return () => { observer.disconnect(); clearTimeout(t); };
   }, [design, refitToContainer]);
 
   useEffect(() => {
@@ -734,15 +717,6 @@ export default function EditorPage({ designId, onBack }) {
     onBack();
   }
 
-  const effectiveScale = baseScale * zoom;
-  // Rounded the same way canvas.setDimensions() rounds the real canvas
-  // backing store (see the zoom-sync effect above) — any mismatch between
-  // this wrapper's CSS size and the canvas's actual pixel size leaves a
-  // hairline gap on an edge where the wrapper's dark background shows
-  // through, which is its own small version of the same "edges don't line
-  // up" problem as the border-radius issue fixed alongside this.
-  const displayW = Math.round((design?.width || 0) * effectiveScale);
-  const displayH = Math.round((design?.height || 0) * effectiveScale);
   const isTextSelected = selected && (selected.type === 'textbox' || selected.type === 'text' || selected.type === 'i-text');
   const isGroupSelected = selected && selected.type === 'group';
   const isBackground = selected?.id === 'background';
@@ -990,8 +964,8 @@ export default function EditorPage({ designId, onBack }) {
         </div>
 
         <div className="canvas-viewport" ref={canvasViewportRef}>
-          <div className="canvas-stage" style={{ width: displayW || 400, height: displayH || 300, position: 'relative' }}>
-            {!design && <div className="empty-state" style={{ position: 'absolute', inset: 0 }}>Loading design…</div>}
+          <div className="canvas-stage">
+            {!design && <div className="empty-state loading-placeholder">Loading design…</div>}
             <canvas ref={canvasElRef} />
           </div>
         </div>
