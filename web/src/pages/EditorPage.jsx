@@ -126,6 +126,23 @@ export default function EditorPage({ designId, onBack }) {
   const [googleFonts, setGoogleFonts] = useState([]);
   const [customFonts, setCustomFonts] = useState([]);
 
+  // Shared with the initial-load fit calculation below — re-measures the
+  // actual viewport and refits whenever it's plausible the AVAILABLE space
+  // changed after load (panel collapsed/expanded, window resized). Without
+  // this, the canvas was only ever sized correctly at the exact instant it
+  // first loaded — collapsing the left panel (freeing up width) or resizing
+  // the browser never re-fit it, so it could end up not matching the space
+  // actually available, which is consistent with the cut-off-content report
+  // on a design opened with the panel already collapsed.
+  const refitToContainer = useCallback((d) => {
+    const viewportEl = canvasViewportRef.current;
+    if (!viewportEl) return;
+    const padding = 64;
+    const availW = Math.max(viewportEl.clientWidth - padding, 100);
+    const availH = Math.max(viewportEl.clientHeight - padding, 100);
+    setBaseScale(Math.min(availW / d.width, availH / d.height, 1));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     let spaceHeld = false;
@@ -162,7 +179,6 @@ export default function EditorPage({ designId, onBack }) {
       const availH = Math.max((viewportEl?.clientHeight || 600) - padding, 100);
       const initialScale = Math.min(availW / d.width, availH / d.height, 1);
       setBaseScale(initialScale);
-
       // The canvas element is created at the scaled-down DISPLAY size, not
       // the full design size — Fabric's own zoom then draws design-space
       // objects (whose left/top/width/height stay in design units) shrunk
@@ -305,6 +321,29 @@ export default function EditorPage({ designId, onBack }) {
     api.listGoogleFonts().then(setGoogleFonts).catch(() => setGoogleFonts([]));
     api.listCustomFonts().then(setCustomFonts).catch(() => setCustomFonts([]));
   }, []);
+
+  // Re-fit when the left panel finishes its collapse/expand transition
+  // (.left-panel has a 150ms width transition — measuring immediately on
+  // toggle would grab the width mid-animation) and on window resize.
+  // Previously the canvas was only ever sized once, at the exact instant
+  // it first loaded — collapsing the panel (freeing up width) or resizing
+  // the browser never re-fit it.
+  useEffect(() => {
+    if (!design) return;
+    const t = setTimeout(() => refitToContainer(design), 200);
+    return () => clearTimeout(t);
+  }, [leftPanelOpen, design, refitToContainer]);
+
+  useEffect(() => {
+    if (!design) return;
+    let t;
+    const onResize = () => {
+      clearTimeout(t);
+      t = setTimeout(() => refitToContainer(design), 150);
+    };
+    window.addEventListener('resize', onResize);
+    return () => { window.removeEventListener('resize', onResize); clearTimeout(t); };
+  }, [design, refitToContainer]);
 
   useEffect(() => {
     if (!positionPopoverOpen && !fieldPopoverOpen) return;
