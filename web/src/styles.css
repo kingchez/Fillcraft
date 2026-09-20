@@ -286,6 +286,14 @@ body {
 .ctx-popover .field { margin-bottom: 8px; }
 .ctx-popover .field:last-child { margin-bottom: 0; }
 .ctx-popover label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px; }
+.arrange-popover { width: 210px; padding: 8px; }
+.arrange-popover-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px 6px 4px; }
+.arrange-popover button {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text); padding: 7px 6px; border-radius: 6px;
+  font-size: 13px; cursor: pointer;
+}
+.arrange-popover button:hover { background: var(--panel-2); }
 
 /* Body: left retractable panel, canvas viewport, right panel */
 .editor-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
@@ -387,6 +395,29 @@ body {
 /* Floating zoom pill — anchored to the canvas viewport itself (not a full-
    width bar under the whole page), so it never grows/shrinks the page and
    never separately competes for space with the topbar or panel. */
+/* Duplicate/delete float directly on the selected element itself (top-right
+   corner), Canva-style, instead of living in the top toolbar — keeps that
+   bar from getting crowded and puts the action right where your eyes
+   already are. Position is computed in EditorPage.jsx by converting the
+   object's bounding box through the canvas's own zoom/pan transform
+   (fabric.util.transformPoint), verified against Fabric's actual behavior
+   directly rather than assumed, so it stays correctly placed at any zoom
+   level, not just 100%. */
+.floating-actions {
+  position: absolute; transform: translate(-100%, -120%); z-index: 6;
+  display: flex; gap: 4px; padding: 4px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-soft);
+  pointer-events: auto;
+}
+.floating-actions button {
+  width: 26px; height: 26px; border-radius: 6px; border: none; cursor: pointer;
+  background: var(--panel-2); color: var(--text); font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+.floating-actions button:hover { background: var(--border); }
+.floating-actions button.danger { color: var(--coral); }
+.floating-actions button.danger:hover { background: rgba(193,97,59,.18); }
+
 .zoom-pill {
   position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 8px; padding: 6px 10px;
@@ -396,7 +427,15 @@ body {
 .zoom-pill .ghost-btn { padding: 4px 10px; font-size: 12.5px; border-radius: 999px; }
 .zoom-slider { width: 110px; }
 
-.preview-layout { display: flex; gap: 20px; }
-.preview-fields { flex: 1; }
-.preview-result { flex: 1; display: flex; align-items: center; justify-content: center; background: #0A0812; border-radius: 10px; min-height: 300px; }
-.preview-result img { max-width: 100%; max-height: 400px; border-radius: 4px; }
+.preview-modal { width: 900px; }
+.preview-layout { display: flex; gap: 20px; align-items: flex-start; }
+.preview-fields { flex: 0 0 260px; max-height: 65vh; overflow-y: auto; padding-right: 4px; }
+.preview-result {
+  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center;
+  background: #120F0A; border-radius: 10px; min-height: 300px; max-height: 65vh; overflow: hidden;
+}
+/* object-fit:contain + a bounded max-height/width is what actually makes
+   this work for any design size/aspect ratio — a tall 1080x1920 design and
+   a wide 1920x1080 one both need to fit inside the same box without either
+   overflowing the modal or shrinking down to a sliver. */
+.preview-result img { max-width: 100%; max-height: 65vh; width: auto; height: auto; object-fit: contain; border-radius: 4px; }

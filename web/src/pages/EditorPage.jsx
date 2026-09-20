@@ -27,6 +27,24 @@ import { computeFitScale } from '../lib/fitScale.js';
 fabric.FabricObject.ownDefaults.originX = 'left';
 fabric.FabricObject.ownDefaults.originY = 'top';
 
+// Selection appearance — Fabric's own defaults are a generic blue, fairly
+// large square handles sitting flush against the object's own edges (no
+// padding), which is exactly what made text hard to read while
+// selected/editing: the border and corner handles sit directly on top of
+// the actual characters. padding adds breathing room between the text and
+// its own selection border; small circular handles (matching Canva's own
+// convention) are easier to grab precisely for a resize/drag without
+// covering nearby text; brass matches the editor's own accent color so
+// it's unambiguous against any design color, not just the ones default
+// Fabric blue happens to contrast with.
+fabric.FabricObject.ownDefaults.padding = 6;
+fabric.FabricObject.ownDefaults.borderColor = '#C99A4B';
+fabric.FabricObject.ownDefaults.cornerColor = '#C99A4B';
+fabric.FabricObject.ownDefaults.cornerStrokeColor = '#1B160F';
+fabric.FabricObject.ownDefaults.cornerStyle = 'circle';
+fabric.FabricObject.ownDefaults.cornerSize = 9;
+fabric.FabricObject.ownDefaults.transparentCorners = false;
+
 const HISTORY_LIMIT = 50;
 
 function newId() {
@@ -148,6 +166,8 @@ export default function EditorPage({ designId, onBack }) {
   const [fontUploading, setFontUploading] = useState(false);
   const [positionPopoverOpen, setPositionPopoverOpen] = useState(false);
   const [fieldPopoverOpen, setFieldPopoverOpen] = useState(false);
+  const [arrangePopoverOpen, setArrangePopoverOpen] = useState(false);
+  const [floatingPos, setFloatingPos] = useState(null);
   const [googleFonts, setGoogleFonts] = useState([]);
   const [customFonts, setCustomFonts] = useState([]);
 
@@ -238,11 +258,20 @@ export default function EditorPage({ designId, onBack }) {
         setSelected(active ? snapshotObject(active) : null);
         setPositionPopoverOpen(false);
         setFieldPopoverOpen(false);
+        setArrangePopoverOpen(false);
+        syncFloatingPos(active);
       };
       canvas.on('selection:created', syncSelection);
       canvas.on('selection:updated', syncSelection);
-      canvas.on('selection:cleared', () => { setSelected(null); setMultiSelected(false); setPositionPopoverOpen(false); setFieldPopoverOpen(false); });
+      canvas.on('selection:cleared', () => { setSelected(null); setMultiSelected(false); setPositionPopoverOpen(false); setFieldPopoverOpen(false); setArrangePopoverOpen(false); setFloatingPos(null); });
       canvas.on('object:modified', syncSelection);
+      // Keeps the floating duplicate/delete buttons attached to the object
+      // while it's actively being dragged/resized/rotated, not just once
+      // when selection first happens.
+      const onLiveTransform = () => syncFloatingPos(canvas.getActiveObject());
+      canvas.on('object:moving', onLiveTransform);
+      canvas.on('object:scaling', onLiveTransform);
+      canvas.on('object:rotating', onLiveTransform);
 
       const pushHistory = () => {
         if (historyRef.current.suppress) return;
@@ -353,11 +382,11 @@ export default function EditorPage({ designId, onBack }) {
   }, [design, refitToContainer]);
 
   useEffect(() => {
-    if (!positionPopoverOpen && !fieldPopoverOpen) return;
-    const onDocClick = () => { setPositionPopoverOpen(false); setFieldPopoverOpen(false); };
+    if (!positionPopoverOpen && !fieldPopoverOpen && !arrangePopoverOpen) return;
+    const onDocClick = () => { setPositionPopoverOpen(false); setFieldPopoverOpen(false); setArrangePopoverOpen(false); };
     document.addEventListener('click', onDocClick);
     return () => document.removeEventListener('click', onDocClick);
-  }, [positionPopoverOpen, fieldPopoverOpen]);
+  }, [positionPopoverOpen, fieldPopoverOpen, arrangePopoverOpen]);
 
   function addUploadedImageToCanvas(asset) {
     fabric.FabricImage.fromURL(asset.url, { crossOrigin: 'anonymous' }).then((img) => {
@@ -372,6 +401,23 @@ export default function EditorPage({ designId, onBack }) {
     if (!confirm(`Remove "${asset.name}" from your uploads? This won't affect designs that already use it.`)) return;
     await api.deleteAsset(asset.key);
     setUploads((u) => u.filter((a) => a.key !== asset.key));
+  }
+
+  // Computes where to anchor the floating duplicate/delete buttons — the
+  // object's own top-right corner, converted from its design-space
+  // bounding box into actual on-screen canvas pixels via the canvas's
+  // current zoom/pan transform. getBoundingRect() alone is NOT in screen
+  // space (verified directly against Fabric's source before relying on
+  // it) — it's in the object's own untransformed coordinate space, so
+  // skipping the transformPoint step here would misplace these buttons at
+  // every zoom level except exactly 100%.
+  function syncFloatingPos(obj) {
+    if (!obj || obj.type === 'activeselection' || obj.id === 'background') { setFloatingPos(null); return; }
+    const canvas = fabricRef.current;
+    if (!canvas) { setFloatingPos(null); return; }
+    const br = obj.getBoundingRect();
+    const topRight = fabric.util.transformPoint({ x: br.left + br.width, y: br.top }, canvas.viewportTransform);
+    setFloatingPos({ left: topRight.x, top: topRight.y });
   }
 
   function snapshotObject(obj) {
@@ -706,6 +752,14 @@ export default function EditorPage({ designId, onBack }) {
       const json = canvas.toObject(['id', 'fillcraftField']);
       const updated = await api.updateDesign(designId, { canvas_json: json });
       setDesign(updated);
+      // Keep the dashboard/gallery card thumbnail in sync with what's
+      // actually been designed — this endpoint existed already but was
+      // never called from anywhere, so every design's card showed exactly
+      // whatever it looked like at creation (blank, or the raw imported
+      // background) forever, no matter how much was added after. Fire-and
+      // -forget: a failed thumbnail refresh shouldn't block or error out
+      // an otherwise-successful save.
+      api.regenerateThumbnail(designId).catch((err) => console.error('Thumbnail refresh failed:', err.message));
     } catch (err) {
       setError(`Save failed: ${err.message}`);
     } finally {
@@ -749,6 +803,9 @@ export default function EditorPage({ designId, onBack }) {
     <div className="editor-page">
       <div className="editor-topbar">
         <button className="ghost-btn" onClick={onBack}>← Back</button>
+        <span className="toolbar-sep" />
+        <button className="ctx-icon-btn" onClick={undo} disabled={!design} title="Undo (Ctrl+Z)">↶</button>
+        <button className="ctx-icon-btn" onClick={redo} disabled={!design} title="Redo (Ctrl+Shift+Z)">↷</button>
         <span className="toolbar-sep" />
 
         {selected && !multiSelected && (
@@ -806,19 +863,27 @@ export default function EditorPage({ designId, onBack }) {
             </span>
 
             <span className="toolbar-sep" />
-            <div className="align-row compact">
-              <button onClick={() => alignSelected('left')} title="Align left">⇤</button>
-              <button onClick={() => alignSelected('center-h')} title="Center horizontally">↔</button>
-              <button onClick={() => alignSelected('right')} title="Align right">⇥</button>
-              <button onClick={() => alignSelected('top')} title="Align top">⤒</button>
-              <button onClick={() => alignSelected('center-v')} title="Center vertically">↕</button>
-              <button onClick={() => alignSelected('bottom')} title="Align bottom">⤓</button>
-            </div>
-            <div className="align-row compact">
-              <button onClick={() => layerAction('back')} title="Send to back">⇊</button>
-              <button onClick={() => layerAction('backward')} title="Send backward">↓</button>
-              <button onClick={() => layerAction('forward')} title="Bring forward">↑</button>
-              <button onClick={() => layerAction('front')} title="Bring to front">⇈</button>
+            <div className="ctx-popover-anchor">
+              <button
+                className={`ghost-btn ${arrangePopoverOpen ? 'active' : ''}`}
+                onClick={(e) => { e.stopPropagation(); setArrangePopoverOpen((v) => !v); setPositionPopoverOpen(false); setFieldPopoverOpen(false); }}
+              >Arrange ▾</button>
+              {arrangePopoverOpen && (
+                <div className="ctx-popover arrange-popover" onClick={(e) => e.stopPropagation()}>
+                  <div className="arrange-popover-label">Align on canvas</div>
+                  <button onClick={() => alignSelected('left')}>⇤ Align left</button>
+                  <button onClick={() => alignSelected('center-h')}>↔ Center horizontally</button>
+                  <button onClick={() => alignSelected('right')}>⇥ Align right</button>
+                  <button onClick={() => alignSelected('top')}>⤒ Align top</button>
+                  <button onClick={() => alignSelected('center-v')}>↕ Center vertically</button>
+                  <button onClick={() => alignSelected('bottom')}>⤓ Align bottom</button>
+                  <div className="arrange-popover-label">Layer order</div>
+                  <button onClick={() => layerAction('front')}>⇈ Bring to front</button>
+                  <button onClick={() => layerAction('forward')}>↑ Bring forward</button>
+                  <button onClick={() => layerAction('backward')}>↓ Send backward</button>
+                  <button onClick={() => layerAction('back')}>⇊ Send to back</button>
+                </div>
+              )}
             </div>
             <span className="toolbar-sep" />
 
@@ -877,9 +942,6 @@ export default function EditorPage({ designId, onBack }) {
               </div>
             )}
 
-            <span className="toolbar-sep" />
-            <button className="ctx-icon-btn" onClick={duplicateSelected} title="Duplicate (Ctrl+D)">⧉</button>
-            {!isBackground && <button className="ctx-icon-btn danger" onClick={deleteSelected} title="Delete">🗑</button>}
           </div>
         )}
 
@@ -901,7 +963,10 @@ export default function EditorPage({ designId, onBack }) {
 
         <div style={{ flex: 1 }} />
         <button className="ghost-btn" onClick={saveDesign} disabled={saving || !design}>{saving ? 'Saving…' : 'Save'}</button>
-        <button className="primary-btn" onClick={openPreview} disabled={!design}>Preview autofill</button>
+        <button
+          className="primary-btn" onClick={openPreview} disabled={!design}
+          title="See this design filled in with sample data — exactly what the autofill API will produce"
+        >▶ Test autofill</button>
         <button className="danger-btn" onClick={handleDeleteDesign} disabled={!design}>🗑 Delete design</button>
       </div>
 
@@ -912,6 +977,12 @@ export default function EditorPage({ designId, onBack }) {
           <div className="canvas-stage">
             {!design && <div className="empty-state loading-placeholder">Loading design…</div>}
             <canvas ref={canvasElRef} />
+            {selected && !multiSelected && floatingPos && (
+              <div className="floating-actions" style={{ left: floatingPos.left, top: floatingPos.top }}>
+                <button onClick={duplicateSelected} title="Duplicate (Ctrl+D)">⧉</button>
+                {!isBackground && <button className="danger" onClick={deleteSelected} title="Delete">🗑</button>}
+              </div>
+            )}
           </div>
 
           <div className="zoom-pill">
@@ -974,12 +1045,6 @@ export default function EditorPage({ designId, onBack }) {
                     <input type="file" accept=".ttf,.otf,.woff,.woff2" style={{ display: 'none' }} onChange={uploadFontFile} disabled={!design || fontUploading} />
                   </label>
                   {customFonts.length > 0 && <div className="hint-text">{customFonts.length} custom font{customFonts.length === 1 ? '' : 's'} — pick it from the font dropdown on any text box.</div>}
-
-                  <div className="left-section-title">History</div>
-                  <div className="align-row">
-                    <button onClick={undo} disabled={!design} title="Undo (Ctrl+Z)">↶ Undo</button>
-                    <button onClick={redo} disabled={!design} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-                  </div>
                 </div>
               )}
 
@@ -1031,19 +1096,30 @@ export default function EditorPage({ designId, onBack }) {
 
       {previewOpen && (
         <div className="modal-backdrop" onClick={() => setPreviewOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Preview autofill</h3>
-            {Object.keys(previewValues).length === 0 && <div className="hint-text">No fields marked yet — mark an object as an autofill field first.</div>}
-            {Object.entries(previewValues).map(([label, value]) => (
-              <div className="field" key={label}>
-                <label>{label}</label>
-                <input type="text" value={value} onChange={(e) => setPreviewValues((v) => ({ ...v, [label]: e.target.value }))} />
+          <div className="modal modal-wide preview-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Test autofill</h3>
+            <div className="hint-text" style={{ marginTop: -8, marginBottom: 14 }}>
+              This fills in sample values and shows exactly what the autofill API will produce — edit any field and re-render to try different data.
+            </div>
+            <div className="preview-layout">
+              <div className="preview-fields">
+                {Object.keys(previewValues).length === 0 && <div className="hint-text">No fields marked yet — mark an object as an autofill field first.</div>}
+                {Object.entries(previewValues).map(([label, value]) => (
+                  <div className="field" key={label}>
+                    <label>{label}</label>
+                    <input type="text" value={value} onChange={(e) => setPreviewValues((v) => ({ ...v, [label]: e.target.value }))} />
+                  </div>
+                ))}
+                <button className="primary-btn full" onClick={() => runPreview(previewValues)} disabled={previewLoading}>
+                  {previewLoading ? 'Rendering…' : 'Re-render'}
+                </button>
               </div>
-            ))}
-            <button className="primary-btn" onClick={() => runPreview(previewValues)} disabled={previewLoading}>
-              {previewLoading ? 'Rendering…' : 'Re-render'}
-            </button>
-            {previewUrl && <img src={previewUrl} alt="Autofill preview" style={{ maxWidth: '100%', marginTop: 12, border: '1px solid #333' }} />}
+              <div className="preview-result">
+                {previewUrl
+                  ? <img src={previewUrl} alt="Autofill preview" />
+                  : <div className="hint-text">{previewLoading ? 'Rendering…' : 'No render yet.'}</div>}
+              </div>
+            </div>
             <div className="modal-actions">
               <button className="ghost-btn" onClick={() => setPreviewOpen(false)}>Close</button>
             </div>
