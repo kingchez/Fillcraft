@@ -174,6 +174,7 @@ async function drawGroup(ctx, obj, values, fieldsByObjectId, renderObject) {
 }
 
 async function drawImage(ctx, obj, overrideSrc) {
+  const isAutofillOverride = !!overrideSrc; // a real value supplied at autofill/preview time, replacing the placeholder
   const src = overrideSrc || obj.src;
   if (!src) return;
   const source = resolveAssetSource(src);
@@ -187,8 +188,18 @@ async function drawImage(ctx, obj, overrideSrc) {
   const w = (obj.width || img.width) * (obj.scaleX || 1);
   const h = (obj.height || img.height) * (obj.scaleY || 1);
 
-  // 'cover' fit — matches how the editor's default image objects behave.
-  const scale = Math.max(w / img.width, h / img.height);
+  // The placeholder image as designed keeps 'cover' (crop-to-fill) — that's
+  // the look it was designed with. But an autofilled REPLACEMENT image
+  // should never lose part of itself to a crop just because its aspect
+  // ratio doesn't match the placeholder box the designer happened to drag
+  // it to: the placeholder's box is a bounding area to contain the whole
+  // supplied image within, not a shape to force it into. So the fit mode
+  // itself depends on whether this is the original design-time image or a
+  // real autofilled value — Math.min ('contain', letterboxed/centered,
+  // nothing cropped) for the latter, Math.max ('cover') for the former.
+  const scale = isAutofillOverride
+    ? Math.min(w / img.width, h / img.height)
+    : Math.max(w / img.width, h / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;
   const dx = x + (w - dw) / 2;
@@ -210,6 +221,10 @@ async function drawImage(ctx, obj, overrideSrc) {
   } else {
     ctx.rect(x, y, w, h);
   }
+  // For a 'contain'-fit autofill image, the clip region above is still the
+  // full placeholder box — correct, since it's the box's own shape/corner-
+  // radius, not a crop of the image. The image itself just won't reach
+  // every edge of it when the aspect ratios differ, which is the point.
   ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.restore();

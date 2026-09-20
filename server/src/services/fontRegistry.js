@@ -50,13 +50,25 @@ export async function ensureGoogleFontRegistered(family) {
 // Scans a design's text objects for font families in use and makes sure
 // each is registered before rendering (covers Google Fonts on demand;
 // custom fonts are already registered at startup / at upload time).
+// Recurses into groups — text nested inside a grouped set of elements (or
+// certain SVG imports) was previously invisible to this scan entirely,
+// since it only ever looked at the top-level objects array. That font
+// would never get registered server-side, so it silently rendered in a
+// fallback font in every export/preview/thumbnail while still showing
+// correctly in the browser editor (which loads fonts independently of
+// this) — exactly the "fonts don't match between design and autofill"
+// symptom, for any text that happened to be grouped.
 export async function ensureFontsForDesign(design) {
   const families = new Set();
-  for (const obj of design.canvas_json?.objects || []) {
-    if ((obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text') && obj.fontFamily) {
-      families.add(obj.fontFamily);
+  const collect = (objects) => {
+    for (const obj of objects || []) {
+      if ((obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text') && obj.fontFamily) {
+        families.add(obj.fontFamily);
+      }
+      if (obj.objects) collect(obj.objects); // group / activeselection children
     }
-  }
+  };
+  collect(design.canvas_json?.objects);
   await Promise.all([...families].map(ensureGoogleFontRegistered));
 }
 
