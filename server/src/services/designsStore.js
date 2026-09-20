@@ -184,14 +184,20 @@ export async function deleteDesign(id) {
   }
 }
 
-// Walks canvas_json.objects (one level — Fabric groups aren't recursed into
-// for field purposes in this version) looking for objects with a
-// `fillcraftField` property: { label, field_type: 'text'|'image', max_characters? }.
-// Upserts a row per tagged object, keyed by (design_id, object's own `id`),
-// and removes any field row whose object no longer exists in the canvas.
+// Walks canvas_json.objects RECURSIVELY (into group children, any depth)
+// looking for objects with a `fillcraftField` property: { label,
+// field_type: 'text'|'image', max_characters? }. Upserts a row per tagged
+// object, keyed by (design_id, object's own `id`), and removes any field
+// row whose object no longer exists in the canvas.
 export async function syncDesignFields(designId, canvasJson) {
-  const objects = Array.isArray(canvasJson?.objects) ? canvasJson.objects : [];
-  const tagged = objects.filter((o) => o.fillcraftField && o.id);
+  const tagged = [];
+  const walk = (objects) => {
+    for (const obj of objects || []) {
+      if (obj.fillcraftField && obj.id) tagged.push(obj);
+      if (Array.isArray(obj.objects)) walk(obj.objects); // group / activeselection children
+    }
+  };
+  walk(canvasJson?.objects);
 
   const { data: existingFields } = await supabase
     .from('fillcraft_design_fields')

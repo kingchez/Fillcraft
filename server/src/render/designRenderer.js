@@ -80,8 +80,18 @@ async function drawShape(ctx, obj) {
 
   ctx.beginPath();
   if (shapeType === 'circle') {
-    const r = (obj.radius || w / 2) * (obj.scaleX || 1);
-    ctx.arc(x + r, y + r, r, 0, Math.PI * 2);
+    // A circle stretched non-uniformly (drag a side handle, not a corner —
+    // an entirely normal editing action) becomes an oval in the editor via
+    // independent scaleX/scaleY, same as any other object. ctx.arc() only
+    // takes one radius; using it here silently flattened every such oval
+    // back into a perfect circle on every export/autofill/thumbnail,
+    // ignoring scaleY entirely — verified with an actual render (a
+    // radius:50,scaleY:2 circle, meant to span 200px tall, rendered only
+    // ~95px tall before this fix). ctx.ellipse() takes independent x/y
+    // radii and doesn't have that limitation.
+    const rx = (obj.radius || w / 2) * (obj.scaleX || 1);
+    const ry = (obj.radius || h / 2) * (obj.scaleY || 1);
+    ctx.ellipse(x + rx, y + ry, rx, ry, 0, 0, Math.PI * 2);
   } else if (shapeType === 'triangle') {
     ctx.moveTo(x + w / 2, y);
     ctx.lineTo(x + w, y + h);
@@ -160,13 +170,23 @@ async function drawPath(ctx, obj) {
 // renderObject is passed in to avoid a circular reference at module scope.
 async function drawGroup(ctx, obj, values, fieldsByObjectId, renderObject) {
   ctx.save();
-  ctx.translate(obj.left || 0, obj.top || 0);
+  // obj.left/top is the group's own TOP-LEFT corner (matches every other
+  // object type — see the origin-default fix in the client editor). But a
+  // Fabric Group's CHILDREN always store their coordinates relative to the
+  // group's CENTER, regardless of that — this is inherent to how Fabric
+  // groups pivot for rotation, not affected by originX/originY defaults.
+  // So the translate has to land on the group's center, not its top-left,
+  // or every grouped object renders shifted by half the group's own
+  // width/height. Verified directly: for a group spanning design-space
+  // (0,0)-(201,101), a child serialized at (-100.5,-50.5) is only correct
+  // once translated by the group's center (100.5, 50.5) — translating by
+  // the group's own left/top (0,0) instead was landing every child at the
+  // wrong point.
+  const cx = (obj.left || 0) + ((obj.width || 0) * (obj.scaleX || 1)) / 2;
+  const cy = (obj.top || 0) + ((obj.height || 0) * (obj.scaleY || 1)) / 2;
+  ctx.translate(cx, cy);
   ctx.rotate(((obj.angle || 0) * Math.PI) / 180);
   ctx.scale(obj.scaleX || 1, obj.scaleY || 1);
-  // Fabric centers a group's own origin at its bounding-box center, so
-  // children (already relative to that center) render correctly with no
-  // further offset once we've translated/rotated/scaled into the group's
-  // local space.
   for (const child of obj.objects || []) {
     await renderObject(ctx, child, values, fieldsByObjectId);
   }
