@@ -1,7 +1,3 @@
-// Image utilities unrelated to the template/design renderer — kept exactly
-// as they were. normalizeProductImage in particular backs the /api/images/
-// normalize endpoint, which is explicitly out of scope for the design-
-// platform rebuild and must keep working unchanged throughout.
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 
 export async function getImageDimensions(buffer) {
@@ -9,31 +5,55 @@ export async function getImageDimensions(buffer) {
   return { width: img.width, height: img.height };
 }
 
-// Registers a locally-stored font file under a family name so it can be
-// referenced by design text objects immediately after upload.
 export function registerFont(filePath, family) {
   GlobalFonts.registerFromPath(filePath, family);
 }
 
+/**
+ * Normalizes an image onto a target canvas.
+ * Supports:
+ * - canvasWidth / canvasHeight (or square canvasSize fallback)
+ * - fit: 'contain' (scales within maxContentRatio, centered on backgroundColor)
+ *        or 'cover' (scales to fill canvas edge-to-edge with centered crop)
+ */
 export async function normalizeProductImage(
   buffer,
-  { canvasSize = 1000, backgroundColor = '#FFFFFF', maxContentRatio = 0.85 } = {}
+  {
+    canvasSize = 1000,
+    canvasWidth,
+    canvasHeight,
+    backgroundColor = '#FFFFFF',
+    maxContentRatio = 0.98,
+    fit = 'contain',
+  } = {}
 ) {
+  const width = Number(canvasWidth) || Number(canvasSize) || 1000;
+  const height = Number(canvasHeight) || Number(canvasSize) || 1000;
+
   const img = await loadImage(buffer);
-  const canvas = createCanvas(canvasSize, canvasSize);
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
   ctx.fillStyle = backgroundColor;
-  ctx.fillRect(0, 0, canvasSize, canvasSize);
+  ctx.fillRect(0, 0, width, height);
 
-  const maxDim = canvasSize * maxContentRatio;
-  const scale = Math.min(maxDim / img.width, maxDim / img.height);
-  const dw = img.width * scale;
-  const dh = img.height * scale;
-  const dx = (canvasSize - dw) / 2;
-  const dy = (canvasSize - dh) / 2;
-
-  ctx.drawImage(img, dx, dy, dw, dh);
+  if (fit === 'cover') {
+    const scale = Math.max(width / img.width, height / img.height);
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    const dx = (width - dw) / 2;
+    const dy = (height - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  } else {
+    const maxW = width * maxContentRatio;
+    const maxH = height * maxContentRatio;
+    const scale = Math.min(maxW / img.width, maxH / img.height);
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    const dx = (width - dw) / 2;
+    const dy = (height - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
 
   return canvas.encode('png');
 }
